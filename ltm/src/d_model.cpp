@@ -42,10 +42,10 @@ DModel::DModel()
 
 DModel::~DModel() 
 {
-  if (edge_map_ != NULL)
+  if (edge_map_ != nullptr)
   {
     delete edge_map_;
-    edge_map_ = NULL;
+    edge_map_ = nullptr;
   }
 }
 
@@ -138,6 +138,7 @@ void DModel::InitFromFile(const char* dmodel_file, double shift_x, double shift_
 void DModel::SetPoints(const geometry_msgs::PoseArray& points)
 {
   points_ = points;
+  printf("DModel: %d points have been set.\n", int(points_.poses.size())); 
   return;
 }
 
@@ -190,6 +191,11 @@ void DModel::AddEdge(Edge e, EdgeParams e_params)
   if (adj_list_.size() == 0)
   {
     adj_list_.resize(points_.poses.size());
+    //TODO: This should not be needed at all
+    if (edge_map_ == NULL)
+    {
+      edge_map_ = new unordered_map<Edge, EdgeParams, pair_hash>;
+    }
   }
   (*edge_map_)[e] = e_params;
   // TODO: Check for duplicates
@@ -920,6 +926,11 @@ bool DModel::GetEndEffectorTrajFromStateIDs(const std::vector<int>& state_ids,
 void DModel::LearnDModelParameters(const vector<geometry_msgs::PoseArray>& observations,
   const vector<Edge>& edges)
 {
+  if (int(points_.poses.size()) == 0)
+  {
+    printf("DModel: Points have not been set. Cannot learn and initialize edges.\n");
+    return;
+  }
   const int num_edges = int(edges.size());
   const int num_obs = int(observations.size());
   const int num_points = int(observations[0].poses.size());
@@ -953,8 +964,8 @@ void DModel::LearnDModelParameters(const vector<geometry_msgs::PoseArray>& obser
       tf::Vector3 constraint_vector = GetLocalVector(observations[jj].poses[edges[ii].first], observations[jj].poses[edges[ii].second]);
 
       // DEBUG
-      printf("Local vector: %f %f %f\n", constraint_vector.x(),
-          constraint_vector.y(), constraint_vector.z());
+      // printf("Local vector: %f %f %f\n", constraint_vector.x(),
+      //    constraint_vector.y(), constraint_vector.z());
       const double constraint_vector_norm = Norm(constraint_vector);
       constraint_vector = constraint_vector / constraint_vector_norm;
 
