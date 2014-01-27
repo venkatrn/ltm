@@ -16,7 +16,7 @@
 #include <kinematics_msgs/GetKinematicSolverInfo.h>
 #include <kinematics_msgs/GetPositionIK.h>
 
-#include <ar_pose/ARMarkers.h>
+#include <ar_track_alvar_msgs/AlvarMarkers.h>
 
 #include <pviz/pviz.h>
 
@@ -79,7 +79,7 @@ class RobotLTM
     /**@brief Callback to trigger and end learning phase**/
     void LearnCB(const std_msgs::Int32ConstPtr& learning_mode);
     /**@ brief Recieve and store AR marker poses**/
-    void ARMarkersCB(const ar_pose::ARMarkersConstPtr& ar_markers);
+    void ARMarkersCB(const ar_track_alvar_msgs::AlvarMarkersConstPtr& ar_markers);
 
     /**@brief Method to initialize DModel from file**/
     void SetModelFromFile(const char *model_file);
@@ -89,6 +89,9 @@ class RobotLTM
 
     /**@brief Get inverse kinematics for the PR2 right arm**/
     bool GetRightIK(const std::vector<double>& ik_pose, const std::vector<double>& seed, std::vector<double>* angles);
+
+    /**@brief Compute the edges between points, by doing nearest neighbor search**/
+    void ComputeEdges(const geometry_msgs::PoseArray& pose_array);
 
 };
 #endif /* _LTM_ROS_ROBOT_LTM_H_ */

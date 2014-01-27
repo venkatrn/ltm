@@ -8,6 +8,7 @@
 #include <ltm/d_model.h>
 #include <ltm/d_model_utils.h>
 
+#include <pcl/kdtree/kdtree_flann.h>
 
 using namespace std;
 
@@ -47,7 +48,7 @@ RobotLTM::RobotLTM() : grasp_idx_(-1),
   grasp_sub_ = nh_.subscribe ("gripper_pose", 1, &RobotLTM::GraspCB, this);
   traj_exec_sub_ = nh_.subscribe ("traj_exec", 1, &RobotLTM::TrajExecCB, this);
   learning_mode_sub_ = nh_.subscribe ("learning_mode", 1, &RobotLTM::LearnCB, this);
-  ar_marker_sub_ = nh_.subscribe("ar_pose_markers", 1, &RobotLTM::ARMarkersCB, this);
+  ar_marker_sub_ = nh_.subscribe("ar_pose_marker", 1, &RobotLTM::ARMarkersCB, this);
 
   // Setup model and planner.
   planner_->SetModel(d_model_);
@@ -91,7 +92,6 @@ void RobotLTM::LearnCB(const std_msgs::Int32ConstPtr& learning_mode)
   {
     // Stop AR Marker tracking, and pass observations to d_model
     ar_marker_tracking_ = false;
-    // TODO: Compute edges
     
     if (int(observations_.size()) == 0)
     {
@@ -99,6 +99,8 @@ void RobotLTM::LearnCB(const std_msgs::Int32ConstPtr& learning_mode)
           "No model will be learnt");
       return;
     }
+
+    ComputeEdges(observations_[0]);
     d_model_->LearnDModelParameters(observations_, edges_);
     return;
   }
@@ -224,7 +226,7 @@ void RobotLTM::TrajExecCB(const std_msgs::Int32ConstPtr& traj_idx_ptr)
   return;
 }
 
-void RobotLTM::ARMarkersCB(const ar_pose::ARMarkersConstPtr& ar_markers)
+void RobotLTM::ARMarkersCB(const ar_track_alvar_msgs::AlvarMarkersConstPtr& ar_markers)
 {
   // Update the d_model state
   const int num_markers = int(ar_markers->markers.size());
@@ -421,4 +423,47 @@ bool RobotLTM::GetRightIK(const vector<double>& ik_pose, const vector<double>& s
     return false; 
   }
   return false;
+}
+
+void RobotLTM::ComputeEdges(const geometry_msgs::PoseArray& pose_array)
+{
+  // Clear existing edges
+  edges_.clear();
+
+  const double kKNNSearchRadius = 0.2;
+  const int kKNNSearchK = 2;
+  
+  const size_t num_points = pose_array.poses.size();
+
+  // Create point cloud for first frame.
+  pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
+  cloud->width = num_points;
+  cloud->height = 1;
+  cloud->points.resize(cloud->width * cloud->height);
+  for (size_t ii = 0; ii < num_points; ++ii)
+  {
+    cloud->points[ii].x = pose_array.poses[ii].position.x;
+    cloud->points[ii].y = pose_array.poses[ii].position.y;
+    cloud->points[ii].z = pose_array.poses[ii].position.z;
+  }
+
+  // Get nearest neighbors for each tracked point, in the first frame.
+  pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
+  kdtree.setInputCloud (cloud);
+
+  for (size_t ii = 0; ii < num_points; ++ii)
+  {
+    vector<int> idxs;
+    vector<float> distances;
+    kdtree.radiusSearch(cloud->points[ii], kKNNSearchRadius, idxs, distances);
+    // kdtree.nearestKSearch(cloud->points[ii], kKNNSearchK, idxs, distances);
+    for (size_t jj = 0; jj < idxs.size(); ++jj)
+    {
+      // TODO: Do distance checking if using knn search instead of radius search.
+      edges_.push_back(make_pair(ii, idxs[jj]));
+    }
+  }
+  return;
+  
+  return;
 }

@@ -2,6 +2,9 @@
   <master auto="start"/>
   <param name="/use_sim_time" value="true"/>
 
+  <!-- Upload robot description to parameter server-->
+  <include file="$(find pr2_description)/robots/upload_pr2.launch" />
+
   <node pkg="ltm_ros" type="ltm_ros_node" name="ltm_ros" output="screen">
     <param name="use_model_file" value="true"/>
 
@@ -26,6 +29,9 @@
   <node pkg="tf" type="static_transform_publisher" name="map_broadcaster" args="0 0 0 0 0 0 1 /base_link /map 100" />
 
   <!-- Bring up the AR Marker tracking node-->
+  <include file="$(find ar_track_alvar)/launch/pr2_indiv_no_kinect.launch"/>
+
+  <!--
   <node pkg="ar_pose" type="ar_multi" name="ar_multi">
     <remap from="/camera/image_raw" to="/narrow_stereo_left/image_rect"/>
     <remap from="/camera/camera_info" to="/narrow_stero_left/camera_info"/>
@@ -34,6 +40,7 @@
     <param name="publish_visual_markers" value="true"/>
     <param name="publish_tf" value="true"/>
   </node>
+  -->
 
 
 </launch>

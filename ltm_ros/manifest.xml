@@ -14,8 +14,9 @@
   <depend package="ltm_msgs"/>
   <depend package="sensor_msgs"/>
   <depend package="kinematics_msgs"/>
-  <depend package="ar_pose"/>
+  <depend package="ar_track_alvar_msgs"/>
   <depend package="pviz"/>
+  <depend package="pcl_ros"/>
 
 </package>
 
