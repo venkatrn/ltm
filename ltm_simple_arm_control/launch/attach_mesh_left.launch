@@ -1,0 +1,12 @@
+<launch>
+
+  <node pkg="simple_arm_control" type="attachObject" name="attach_object" output="screen" >
+    <param name="shape"      value="mesh" />
+    <param name="operation"  value="add" />
+    <param name="arm_side_prefix" value="l" />
+    <param name="object_id" value="left_mesh" />
+    <param name="mesh_filename" value="$(find pr2_description)/meshes/upper_arm_v0/upper_arm.stl" />
+    <!-- <param name="mesh_filename" value="$(find gazebo_worlds)/Media/models/trimesh_cone.stl" /> -->
+  </node>
+
+</launch>

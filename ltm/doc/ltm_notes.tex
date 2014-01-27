@@ -1,0 +1,53 @@
+\documentclass[english]{article}
+\usepackage[T1]{fontenc}
+\usepackage[latin9]{inputenc}
+\usepackage{geometry}
+\geometry{verbose,tmargin=0.8in,bmargin=0.8in,lmargin=0.7in,rmargin=0.7in}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{babel}
+\usepackage{algorithmic}
+\usepackage[ruled]{algorithm2e}
+\usepackage{amsthm}
+\usepackage{enumerate}
+
+
+\DeclareMathOperator*{\argmin}{\arg\!\min}
+\DeclareMathOperator*{\argmax}{\arg\!\max}
+
+\begin{document}
+
+\newcounter{qcounter}
+
+\date{}
+\title{\textbf{Representations for Manipulation of Articulated Objects}}
+%\author{Venkatraman Narayanan}
+\maketitle
+\section*{Terminology and Notation}
+The deformable model (d-model) is a graph $G=(V,E)$ with vertices $v\in SE(3)$ and the edges
+representing the kinematic constraint between the vertices. A vertex $v$ is defined by the
+position of the point $x$ and its rotation $R$ with respect to the world frame.
+For vertices $v_i, v_j\in V$, the correspoding edge $e_{ij}=(v_i,v_j)$ is associated with three parameters $(\tau_{ij}, c_{ij}, r_{ij})$ defined by:
+\begin{align*}
+  \tau_{ij} &= \begin{cases}
+  0 \mbox{ if the joint is rigid}\\
+  1 \mbox{ if the joint is prismatic} \\
+  2 \mbox{ if the joint is revolute} \\
+  3 \mbox{ if the joint is planar (no rotation)} \\
+  4 \mbox{ if the joint is cylindrical} \\
+  5 \mbox{ if the joint is planar} \\
+  6 \mbox{ if the joint is spherical} \\
+  7 \mbox{ if the joint is a helix} \\
+\end{cases}
+\end{align*}
+\subsection*{Rigid joint}
+ $c_{ij}$ and $r_{ij}$ are undefined.
+\subsection*{Prismatic joint}
+$c_{ij}$ is the direction of motion defined by the prismatic joint. $r_{ij}$ is undefined.
+\subsection*{Revolute joint}
+$c_{ij}$ is the axis of rotation and $r_{ij}$ is the radius of rotation.
+\subsection*{Planar joint (no rotation)}
+$c_{ij}$ is the normal to the plane of motion.
+\subsection*{Spherical joint}
+\end{document}

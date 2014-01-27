@@ -1,0 +1,28 @@
+<package>
+  <description brief="ltm_simple_arm_control">
+    Basic launch files to control the arm with and without planning.
+
+    "move" - send {x,y,z,r,p,y} to planner
+    
+    "control" - send {theta0, .... ,theta6} to controller
+
+  </description>
+  <author>Benjamin Cohen (Modified by Venkatraman Narayanan)</author>
+  <license>BSD</license>
+  <review status="unreviewed" notes=""/>
+  <url>http://ros.org/wiki/simple_arm_control</url>
+
+  <depend package="roscpp"/>
+  <depend package="std_msgs"/>
+  <depend package="pr2_controllers_msgs"/>
+  <depend package="actionlib"/> 
+  <depend package="arm_navigation_msgs"/>
+  <depend package="geometry_msgs"/>
+  <depend package="tf"/>
+  <depend package="angles" />
+  <depend package="interactive_markers" />
+  <depend package="kinematics_msgs" />
+
+</package>
+
+

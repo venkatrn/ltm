@@ -1,0 +1,22 @@
+<package>
+  <description brief="ltm">
+
+     ltm
+
+  </description>
+  <author>Venkatraman Narayanan</author>
+  <license>BSD</license>
+  <review status="unreviewed" notes=""/>
+  <url>http://ros.org/wiki/ltm</url>
+
+  <depend package="tf"/>
+  <depend package="geometry_msgs"/>
+  <depend package="visualization_msgs"/>
+  
+  <export>
+     <cpp cflags="-I${prefix}/include" lflags="-L${prefix}/lib -Wl,-rpath,${prefix}/lib -lltm"/>
+  </export>
+
+</package>
+
+

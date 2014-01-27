@@ -1,0 +1,95 @@
+/**
+ * @file robot_ltm.h
+ * @author Venkatraman Narayanan
+ * Carnegie Mellon University, 2014
+ */
+
+#ifndef _LTM_ROS_ROBOT_LTM_H_
+#define _LTM_ROS_ROBOT_LTM_H_
+
+#include <ltm/d_model.h>
+#include <ltm/d_model_planner.h>
+
+#include <ros/ros.h>
+#include <ltm_msgs/DModel.h>
+
+#include <kinematics_msgs/GetKinematicSolverInfo.h>
+#include <kinematics_msgs/GetPositionIK.h>
+
+#include <ar_pose/ARMarkers.h>
+
+#include <pviz/pviz.h>
+
+#include <tf/transform_listener.h>
+
+#include <std_msgs/Int32.h>
+
+class RobotLTM
+{
+  public:
+    RobotLTM();
+    ~RobotLTM();
+
+
+  private:
+    ros::NodeHandle nh_;
+
+    DModel* d_model_;
+    DModelPlanner* planner_;
+
+    PViz pviz_;
+    tf::TransformListener tf_listener_;
+
+    bool use_model_file_;
+    std::string model_file_;
+    std::string fprims_file_;
+    std::string reference_frame_;
+    double sim_time_step_;
+    double model_offset_x_, model_offset_y_, model_offset_z_;
+
+    int grasp_idx_;
+
+    // Tracking points/ar markers
+    bool ar_marker_tracking_;
+    std::vector<geometry_msgs::PoseArray> observations_;
+    std::vector<Edge> edges_;
+
+    ros::ServiceClient query_client_;
+    ros::ServiceClient ik_client_;
+
+    // Subscribers
+    ros::Subscriber cloud_sub_;
+    ros::Subscriber goal_sub_;
+    ros::Subscriber grasp_sub_;
+    ros::Subscriber traj_exec_sub_;
+    ros::Subscriber learning_mode_sub_;
+    ros::Subscriber ar_marker_sub_;
+ 
+    // Publishers
+    ros::Publisher plan_pub_;
+
+    // Callbacks
+    void ModelCB(const ltm_msgs::DModel& d_model);
+    void GraspCB(const geometry_msgs::PoseStampedConstPtr& grasp_pose);
+    /**@brief For now, the goal state is defined only by the final position
+    * of the end effector
+    */
+    void GoalCB(const geometry_msgs::PoseStampedConstPtr& goal_pose);
+    void TrajExecCB(const std_msgs::Int32ConstPtr& traj_idx);
+    /**@brief Callback to trigger and end learning phase**/
+    void LearnCB(const std_msgs::Int32ConstPtr& learning_mode);
+    /**@ brief Recieve and store AR marker poses**/
+    void ARMarkersCB(const ar_pose::ARMarkersConstPtr& ar_markers);
+
+    /**@brief Method to initialize DModel from file**/
+    void SetModelFromFile(const char *model_file);
+
+    /**@brief Simulate plan, with the PR2 robot**/
+    void SimulatePlan(const geometry_msgs::PoseArray& plan, const std::vector<int>& state_ids, const std::vector<tf::Vector3>& forces);
+
+    /**@brief Get inverse kinematics for the PR2 right arm**/
+    bool GetRightIK(const std::vector<double>& ik_pose, const std::vector<double>& seed, std::vector<double>* angles);
+
+};
+#endif /* _LTM_ROS_ROBOT_LTM_H_ */
+

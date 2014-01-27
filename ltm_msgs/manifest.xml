@@ -1,0 +1,16 @@
+<package>
+  <description brief="ltm_msgs">
+
+     ltm_msgs
+
+  </description>
+  <author>Venkatraman Narayanan</author>
+  <license>BSD</license>
+  <review status="unreviewed" notes=""/>
+  <url>http://ros.org/wiki/ltm_msgs</url>
+
+  <depend package="geometry_msgs"/>
+
+</package>
+
+

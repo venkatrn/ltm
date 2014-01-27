@@ -1,0 +1,10 @@
+<launch>
+
+  <node pkg="simple_arm_control" type="attachObject" name="attach_object" >
+    <param name="shape"      value="cylinder" />
+    <param name="operation"  value="add" />
+    <param name="radius" value="0.05" />
+    <param name="radius" value="0.15" />
+  </node>
+
+</launch>

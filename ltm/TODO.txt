@@ -1,0 +1,16 @@
+
+Action Items:
+
+Implementation:
+1. Simulate d-model: Given 3D points and associated parameters, simulate the motion of points 
+   in RVIZ for a sequence of applied forces -- Nov. 27
+2. Learn parameters from demonstration, assuming perfect tracking -- Dec. 20
+3. Learn parameters from demonstration, on the PR2 -- Jan 10
+4. Learn parameters, plan and execute, replan if desired -- Jan 20
+
+Paper:
+1. Start writing - Jan 14
+2. First draft - Jan 21
+3. Second draft - Jan 27
+4. Submit - Jan 31
+

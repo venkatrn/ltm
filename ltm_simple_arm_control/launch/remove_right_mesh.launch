@@ -1,0 +1,10 @@
+<launch>
+
+  <node pkg="simple_arm_control" type="attachObject" name="attach_object" output="screen" >
+    <param name="shape"      value="mesh" />
+    <param name="operation"  value="remove" />
+    <param name="arm_side_prefix" value="r" />
+    <param name="object_id" value="right_mesh" />
+  </node>
+
+</launch>

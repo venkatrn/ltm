@@ -1,0 +1,39 @@
+<launch>
+  <master auto="start"/>
+  <param name="/use_sim_time" value="true"/>
+
+  <node pkg="ltm_ros" type="ltm_ros_node" name="ltm_ros" output="screen">
+    <param name="use_model_file" value="true"/>
+
+    <param name="model_file" value="$(find ltm)/matlab/models/door.mdl"/>
+    <param name="model_offset_x" value="1.65"/>
+    <param name="model_offset_y" value="0.0"/>
+    <param name="model_offset_z" value="1.0"/>
+    <param name="fprims_file" value="$(find ltm)/matlab/fprims/circle_40.fprim"/>
+
+    <!--
+    <param name="model_file" value="$(find ltm)/matlab/models/drawer_small.mdl"/>
+    <param name="model_offset_x" value="-0.2"/>
+    <param name="model_offset_y" value="0.0"/>
+    <param name="model_offset_z" value="0.0"/>
+    <param name="fprims_file" value="$(find ltm)/matlab/fprims/linear_4.fprim"/>
+    <param name="fprims_file" value="$(find ltm)/matlab/fprims/circle_40.fprim"/>
+    -->
+
+    <param name="sim_time_step" value="0.05"/>
+  </node>
+
+  <node pkg="tf" type="static_transform_publisher" name="map_broadcaster" args="0 0 0 0 0 0 1 /base_link /map 100" />
+
+  <!-- Bring up the AR Marker tracking node-->
+  <node pkg="ar_pose" type="ar_multi" name="ar_multi">
+    <remap from="/camera/image_raw" to="/narrow_stereo_left/image_rect"/>
+    <remap from="/camera/camera_info" to="/narrow_stero_left/camera_info"/>
+    <param name="marker_patter_list" value="$(find ar_pose)/data/object_4x4"/>
+    <param name="threshold" value="100"/>
+    <param name="publish_visual_markers" value="true"/>
+    <param name="publish_tf" value="true"/>
+  </node>
+
+
+</launch>
