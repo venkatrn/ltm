@@ -66,8 +66,11 @@ int main(int argc, char** argv)
   edges.push_back(make_pair(0, 1));
   edges.push_back(make_pair(1, 2));
 
-  DModel d_model;
-  d_model.LearnDModelParameters(observations, edges);
+  DModel* d_model = new DModel;
+  d_model->SetPoints(pa1);
+  d_model->LearnDModelParameters(observations, edges);
+  d_model->PrintEdges();
 
+  delete d_model;
   return 0;
 }
