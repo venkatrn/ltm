@@ -23,6 +23,7 @@ double Norm(tf::Vector3 v);
 tf::Vector3 Cross(tf::Vector3 a, tf::Vector3 b);
 
 double Sqr(double num);
+double Max(double a, double b, double c);
 
 double NormalPDF(double x, double mean, double var);
 double MultivariateNormalPDF(Eigen::Vector3d x, Eigen::Vector3d mu, Eigen::Matrix3d sigma);

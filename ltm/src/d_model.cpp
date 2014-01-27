@@ -1055,6 +1055,7 @@ void DModel::LearnDModelParameters(const vector<geometry_msgs::PoseArray>& obser
   */
 
   // Decision tree based on variance
+  // TODO: This must be refined
   const double constraint_thresh = 0.05;
   const double dist_thresh = 0.05;
   for (int ii = 0; ii < num_edges; ++ii)
@@ -1092,6 +1093,47 @@ void DModel::LearnDModelParameters(const vector<geometry_msgs::PoseArray>& obser
   {
     printf("Edge (%d %d): %f %f %f\n", edges[ii].first, edges[ii].second, 
         p_rigid[ii], p_prismatic[ii], p_revolute[ii]);
+  }
+  
+  // Initialize edges
+  for (int ii = 0; ii < num_edges; ++ii)
+  {
+    // Determine edge type
+    double max_p = p_rigid[ii];
+    JointType jt = RIGID;
+    if (p_prismatic[ii] > max_p)
+    {
+      max_p = p_prismatic[ii];
+      jt = PRISMATIC;
+    }
+    if (p_revolute[ii] > max_p)
+    {
+      max_p = p_revolute[ii];
+      jt = REVOLUTE;
+    }
+    
+     // Add edge
+    EdgeParams e_params;
+    e_params.joint = jt;
+    // Rad does not matter for now
+    e_params.rad = 1.0; 
+    if (jt == RIGID)
+    {
+      // No constraint vector for rigid joints
+      e_params.normal = tf::Vector3(0.0, 0.0, 0.0);
+    }
+    else if (jt == PRISMATIC)
+    {
+      e_params.normal = constraint_means[ii];
+    }
+    else if (jt == PRISMATIC)
+    {
+      //TODO: I am assuming the first and last vectors are different
+      tf::Vector3 c1 = GetLocalVector(observations[0].poses[edges[ii].first], observations[0].poses[edges[ii].second]);
+      tf::Vector3 c2 = GetLocalVector(observations.back().poses[edges[ii].first], observations.back().poses[edges[ii].second]);
+      e_params.normal = Cross(c1, c2);
+    }
+    AddEdge(edges[ii], e_params);
   }
   return;
 }

@@ -41,6 +41,11 @@ double Sqr(double num)
   return num*num;
 }
 
+double Max(double a, double b, double c)
+{
+  return std::max(std::max(a,b), c);
+}
+
 tf::Vector3 Cross(tf::Vector3 a, tf::Vector3 b)
 {
   tf::Vector3 cross_product(a.y()*b.z() - a.z()*b.y(), -a.x()*b.z() + a.z()*b.x(), 
