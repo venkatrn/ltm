@@ -1,0 +1,7 @@
+IMPORTANT
+Setting start state after goal state results in repeated state id (0)
+Edge map initialization results in possible memory leak
+
+
+No ground connection in model
+Edges in model are bidirectional

@@ -163,7 +163,8 @@ void RobotLTM::GoalCB(const geometry_msgs::PoseStampedConstPtr& goal_pose)
     ROS_INFO("LTM Node: Grasp point has not been set. Will attempt to take point nearest to goal pose as the grasp point.\n");
   }
 
-  // Offset the effector goal pose by the position of the nearest point on D-Model. This assumes a rigid connection between the end-effector location and the closest D-model point.
+  // Offset the effector goal pose by the position of the nearest point on D-Model.
+  // This assumes a rigid connection between the end-effector location and the closest D-model point
   geometry_msgs::PoseArray points = d_model_->GetDModelPoints();
   geometry_msgs::Pose closest_point = points.poses[grasp_idx_];
   geometry_msgs::Point offset;

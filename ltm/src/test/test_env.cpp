@@ -78,5 +78,7 @@ int main(int argc, char** argv)
   // Simulate plan.
   d_model->SimulatePlan(forces);
   
+  delete d_model;
+  delete planner;
   return 0;
 }

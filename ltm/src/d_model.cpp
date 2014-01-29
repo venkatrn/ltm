@@ -140,7 +140,7 @@ void DModel::SetPoints(const geometry_msgs::PoseArray& points)
   points_.poses.clear();
   points_ = points;
   printf("DModel: %d points have been set.\n", int(points_.poses.size())); 
-  TFCallback(points_);
+  //TFCallback(points_);
   return;
 }
 
@@ -723,8 +723,10 @@ State_t DModel::StateIDToState(int state_id)
   }
   else
   {
-    printf("Requested State ID does not exist\n");
+    printf("DModel: Error. Requested State ID does not exist. Will return empty state.\n");
   }
+  State_t empty_state;
+  return empty_state;
 }
 
 void DModel::GetSuccs(int source_state_id, vector<int>* succs, vector<double>* costs)
@@ -861,7 +863,6 @@ void DModel::SetStartState(State_t start_state)
 {
   int start_state_id = StateToStateID(start_state);
   printf("DModel: Setting start state: %d\n", start_state_id);
-  printf("Num changed points: %d\n", start_state.changed_inds.size());
   env_cfg_.start_state_id = start_state_id;
   return; 
 }
@@ -870,7 +871,6 @@ void DModel::SetGoalState(State_t goal_state)
 {
   int goal_state_id = StateToStateID(goal_state);
   printf("DModel: Setting goal state: %d\n",goal_state_id);
-  printf("Num changed points: %d\n", goal_state.changed_inds.size());
   env_cfg_.goal_state_id = goal_state_id;
   // TODO: This is only for single grasp plans.
   if (int(goal_state.changed_inds.size()) != 0)
@@ -943,100 +943,112 @@ void DModel::LearnDModelParameters(const vector<geometry_msgs::PoseArray>& obser
     edge_map_->clear();
   }
   const int num_obs = int(observations.size());
-  const int num_points = int(observations[0].poses.size());
 
-  if (num_obs == 0)
+  if (num_obs < 2)
   {
-    printf("DModel: No observations to learn model from\n");
+    printf("DModel: Not enough observations to learn model from\n");
     return;
   }
 
-  // Gaussian mean for each edge, for constraint vector, and for distance
+  // Edges in local frame. For an edge (x1,x2), c = x2 expressed in frame of x1, and normalized.
+  // Number of frames x Number of edges
+  vector<vector<tf::Vector3>> local_vectors;
+  vector<vector<double>> dists;
+  local_vectors.resize(num_obs);
+  dists.resize(num_obs);
+  for (int ii = 0; ii < num_obs; ++ii)
+  {
+    local_vectors[ii].resize(num_edges);
+    dists[ii].resize(num_edges);
+    for (int jj = 0; jj < num_edges; ++jj)
+    {
+      tf::Vector3 c_vector = GetLocalVector(observations[ii].poses[edges[jj].first], observations[ii].poses[edges[jj].second]);
+      // DEBUG
+       printf("Local vector: %f %f %f\n", c_vector.x(),
+          c_vector.y(), c_vector.z());
+      const double c_vector_norm = Norm(c_vector);
+      if (c_vector_norm > kFPTolerance)
+      {
+        local_vectors[ii][jj] = c_vector / c_vector_norm;
+      }
+      dists[ii][jj] = c_vector_norm;
+    }
+  }
+
+  // Compute the axis vectors for edges in two consecutive frames
+  vector<vector<tf::Vector3>> axis_vectors;
+  axis_vectors.resize(num_obs - 1);
+  for (int ii = 0; ii < num_obs - 1; ++ii)
+  {
+    axis_vectors[ii].resize(num_edges);
+    for (int jj = 0; jj < num_edges; ++jj) 
+    {
+        axis_vectors[ii][jj] = Cross(local_vectors[ii][jj], local_vectors[ii + 1][jj]);
+        const double axis_vector_norm = Norm(axis_vectors[ii][jj]);
+        if (axis_vector_norm > kFPTolerance)
+        {
+          axis_vectors[ii][jj] = axis_vectors[ii][jj] / axis_vector_norm;
+        }
+      // DEBUG
+      printf("Axis vector: %f %f %f\n", axis_vectors[ii][jj].x(),
+          axis_vectors[ii][jj].y(), axis_vectors[ii][jj].z());
+    }
+  }
+
   vector<tf::Vector3> constraint_means;
   constraint_means.resize(num_edges);
   vector<double> dist_means;
   dist_means.resize(num_edges);
+  vector<tf::Vector3> axis_means;
+  axis_means.resize(num_edges);
 
-  // Gaussian covariance for each edge, for constraint vector, and for distance
-  vector<Eigen::Matrix3d> constraint_cov;
-  constraint_cov.resize(num_edges);
-  vector<double> dist_cov;
-  dist_cov.resize(num_edges);
-
-  // MLE for means
+  // Estimate parameters for all joint types
   for (int ii = 0; ii < num_edges; ++ii)
   {
     constraint_means[ii] = tf::Vector3(0.0, 0.0, 0.0);
     dist_means[ii] = 0.0;
-
-    for (int jj = 0; jj < num_obs; ++jj)
+    axis_means[ii] = tf::Vector3(0.0, 0.0, 0.0);
+    for (int jj = 0; jj < num_obs - 1; ++jj)
     {
-      tf::Vector3 constraint_vector = GetLocalVector(observations[jj].poses[edges[ii].first], observations[jj].poses[edges[ii].second]);
-
-      // DEBUG
-      // printf("Local vector: %f %f %f\n", constraint_vector.x(),
-      //    constraint_vector.y(), constraint_vector.z());
-      const double constraint_vector_norm = Norm(constraint_vector);
-      constraint_vector = constraint_vector / constraint_vector_norm;
-
-      constraint_means[ii] = constraint_means[ii] + constraint_vector;
-      dist_means[ii] = dist_means[ii] + constraint_vector_norm;
+      constraint_means[ii] = constraint_means[ii] + local_vectors[jj][ii];
+      dist_means[ii] = dist_means[ii] + dists[jj][ii];
+      axis_means[ii] = axis_means[ii] + axis_vectors[jj][ii];
     }
-    constraint_means[ii] = constraint_means[ii] / num_obs;
-    dist_means[ii] = dist_means[ii] / num_obs;
+    constraint_means[ii] = constraint_means[ii] / (num_obs - 1);
+    dist_means[ii] = dist_means[ii] / (num_obs - 1);
+    axis_means[ii] = axis_means[ii] / (num_obs - 1);
   }
 
-  // MLE for covariances
-  for (int ii = 0; ii < num_edges; ++ii)
-  {
-    constraint_cov[ii] = Eigen::Matrix3d::Zero();
-    dist_cov[ii] = 0.0;
-
-    for (int jj = 0; jj < num_obs; ++jj)
-    {
-      // TODO: Clean up this code to make it non-repetitive
-      tf::Vector3 constraint_vector = GetLocalVector(observations[jj].poses[edges[ii].first], observations[jj].poses[edges[ii].second]);
-      const double constraint_vector_norm = Norm(constraint_vector);
-      constraint_vector = constraint_vector / constraint_vector_norm;
-      tf::Vector3 centered_constraint_vector = constraint_vector - constraint_means[ii];
-
-      Eigen::Vector3d c_vec(centered_constraint_vector.x(),
-          centered_constraint_vector.y(),
-          centered_constraint_vector.z());
-      Eigen::Matrix3d cov = c_vec * c_vec.transpose();
-      constraint_cov[ii] = constraint_cov[ii] + cov;
-      dist_cov[ii] = dist_cov[ii] + Sqr(constraint_vector_norm - dist_means[ii]);
-    }
-    constraint_cov[ii] = constraint_cov[ii] / num_obs;
-    dist_cov[ii] = dist_cov[ii] / num_obs;
-  }
-
-  printf("MLE Estimates:\n");
+  printf("Parameter estimates:\n");
   for (int ii = 0; ii < num_edges; ++ii)
   {
     printf("Edge: %d %d\n", edges[ii].first, edges[ii].second);
+    printf("Dist mean: %f\n", dist_means[ii]);
     printf("Constraint mean: %f %f %f\n", constraint_means[ii].x(),
         constraint_means[ii].y(), constraint_means[ii].z());
-    cout << "Constraint cov:\n" << constraint_cov[ii] << endl;
-    double cov_det = pow(constraint_cov[ii].determinant(), 0.33);
-    double cov_trace = constraint_cov[ii].trace();
-    printf("Constraint cov det: %f\n", cov_det);
-    printf("Constraint cov trace: %f\n\n", cov_trace);
-    printf("Dist mean: %f\n", dist_means[ii]);
-    printf("Dist cov: %f\n\n", dist_cov[ii]);
+    printf("Axis mean: %f %f %f\n", axis_means[ii].x(),
+        axis_means[ii].y(), axis_means[ii].z());
   }
 
-  // We need to compute edge params for all edges
+  // Assign edge params for all edges
   vector<EdgeParams> edge_params;
   edge_params.resize(num_edges);
-
 
   vector<double> p_rigid, p_prismatic, p_revolute;
   p_rigid.resize(num_edges);
   p_prismatic.resize(num_edges);
   p_revolute.resize(num_edges);
 
-  /*
+  // Setup sensor model
+  const double kDistVar = 0.05;
+  const double kDirVar = 0.1;
+  Eigen::Matrix3d dir_covariance(kDirVar * Eigen::Matrix3d::Identity());
+
+  // Priors
+  const double rigid_prior = 0.4;
+  const double prismatic_prior = 0.3;
+  const double revolute_prior = 0.3;
+
   // Bayesian inference to assign parameters
   for (int ii = 0; ii < num_edges; ++ii)
   {
@@ -1044,28 +1056,41 @@ void DModel::LearnDModelParameters(const vector<geometry_msgs::PoseArray>& obser
     p_prismatic[ii] = 1.0;
     p_revolute[ii] = 1.0;
 
-    for (int jj = 0; jj < num_obs; ++jj)
+    for (int jj = 0; jj < num_obs - 1; ++jj)
     {
-      tf::Vector3 constraint_vector = GetLocalVector(observations[jj].poses[edges[ii].first], observations[jj].poses[edges[ii].second]);
-      const double constraint_vector_norm = Norm(constraint_vector);
-      constraint_vector = constraint_vector / constraint_vector_norm;
-      Eigen::Vector3d c_vec(constraint_vector.x(),
-                            constraint_vector.y(),
-                            constraint_vector.z());
+      Eigen::Vector3d c_vec(local_vectors[jj][ii].x(),
+                            local_vectors[jj][ii].y(),
+                            local_vectors[jj][ii].z());
+      Eigen::Vector3d axis_vec(axis_vectors[jj][ii].x(),
+                            axis_vectors[jj][ii].y(),
+                            axis_vectors[jj][ii].z());
       Eigen::Vector3d c_mu(constraint_means[ii].x(),
                            constraint_means[ii].y(),
                            constraint_means[ii].z());
+      Eigen::Vector3d axis_mu(axis_means[ii].x(),
+                           axis_means[ii].y(),
+                           axis_means[ii].z());
 
-      const double p_constraint_vec = MultivariateNormalPDF(c_vec,
-          c_mu, constraint_cov[ii]);
-      const double p_dist = NormalPDF(constraint_vector_norm, dist_means[ii], dist_cov[ii]);
-      const double p_constraint_mean = MultivariateNormalPDF(c_mu, c_mu, constraint_cov[ii]);
-      const double p_dist_mean = NormalPDF(dist_means[ii], dist_means[ii], dist_cov[ii]);
-      printf("%f %f\n", p_constraint_vec, p_dist);
-      printf("%f %f\n", p_constraint_mean, p_dist_mean);
-      p_rigid[ii] *= p_constraint_vec/p_constraint_mean * p_dist/p_dist_mean;
-      p_prismatic[ii] *= p_constraint_vec/p_constraint_mean * (1.0 - p_dist/p_dist_mean);
-      p_revolute[ii] *= p_dist/p_dist_mean * (1.0  - p_constraint_vec/p_constraint_mean);
+       const double p_dist = NormalPDF(dists[jj][ii], dist_means[ii], kDistVar);
+       const double p_c_vec = MultivariateNormalPDF(c_vec, c_mu, dir_covariance);
+       // Treat redundant axis vectors as highly likely ones
+       double p_axis_vec;
+       if (fabs(axis_vectors[jj][ii].x()) < kFPTolerance &&
+           fabs(axis_vectors[jj][ii].y()) < kFPTolerance &&
+           fabs(axis_vectors[jj][ii].z()) < kFPTolerance)
+       {
+         p_axis_vec = MultivariateNormalPDF(axis_mu, axis_mu, dir_covariance);
+       }
+       else
+       {
+         p_axis_vec = MultivariateNormalPDF(axis_vec, axis_mu, dir_covariance);
+       }
+
+       // DEBUG
+       printf("%f %f %f\n", p_dist, p_c_vec, p_axis_vec);
+       p_rigid[ii] *= p_dist * p_c_vec * rigid_prior;
+       p_prismatic[ii] *= p_c_vec * prismatic_prior;
+       p_revolute[ii] *= p_axis_vec * p_dist * revolute_prior;
     }
 
     // Normalize the probabilties
@@ -1078,10 +1103,9 @@ void DModel::LearnDModelParameters(const vector<geometry_msgs::PoseArray>& obser
     p_prismatic[ii] /= normalizer;
     p_revolute[ii] /= normalizer;
   }
-  */
 
   // Decision tree based on variance
-  // TODO: This must be refined
+  /*
   const double constraint_thresh = 0.05;
   const double dist_thresh = 0.15; //0.05
   for (int ii = 0; ii < num_edges; ++ii)
@@ -1113,6 +1137,7 @@ void DModel::LearnDModelParameters(const vector<geometry_msgs::PoseArray>& obser
       p_revolute[ii] = 0.33;
     }
   }
+  */
   
   // Display probabilities
   printf("DModel: Learnt probabilities\n");
