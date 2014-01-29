@@ -200,9 +200,15 @@ void DModel::AddEdge(Edge e, EdgeParams e_params)
     }
   }
   (*edge_map_)[e] = e_params;
-  // TODO: Check for duplicates
-  adj_list_[e.first].push_back(e.second);
-  adj_list_[e.second].push_back(e.first);
+  // TODO: Do this in a smarter way?
+  if (find(adj_list_[e.first].begin(), adj_list_[e.first].end(), e.second) != adj_list_[e.first].end())
+  {
+    adj_list_[e.first].push_back(e.second);
+  }
+  if (find(adj_list_[e.second].begin(), adj_list_[e.second].end(), e.first) != adj_list_[e.second].end())
+  {
+    adj_list_[e.second].push_back(e.first);
+  }
   return;
 }
 
