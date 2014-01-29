@@ -30,7 +30,7 @@ using namespace visualization_msgs;
 // %Tag(vars)%
 boost::shared_ptr<interactive_markers::InteractiveMarkerServer> server;
 interactive_markers::MenuHandler menu_handler;
-actionlib::SimpleActionClient<arm_navigation_msgs::MoveArmAction> *move_arm;
+//actionlib::SimpleActionClient<arm_navigation_msgs::MoveArmAction> *move_arm;
 actionlib::SimpleActionClient<pr2_controllers_msgs::SingleJointPositionAction> *move_torso;
 actionlib::SimpleActionClient<pr2_controllers_msgs::Pr2GripperCommandAction> *move_gripper;
 
@@ -662,8 +662,8 @@ int main(int argc, char** argv)
   std::string arm_name;
   ROS_INFO("using right arm"); 
 //  actionlib::SimpleActionClient<arm_navigation_msgs::MoveArmAction> move_arm(nh,"move_arm");
-  move_arm = new actionlib::SimpleActionClient<arm_navigation_msgs::MoveArmAction>("move_right_arm",true);
-  move_arm->waitForServer();
+//  move_arm = new actionlib::SimpleActionClient<arm_navigation_msgs::MoveArmAction>("move_right_arm",true);
+//  move_arm->waitForServer();
   ROS_INFO("Connected to move arm server");  
   
   move_torso = new actionlib::SimpleActionClient<pr2_controllers_msgs::SingleJointPositionAction>("torso_controller/position_joint_action", true);

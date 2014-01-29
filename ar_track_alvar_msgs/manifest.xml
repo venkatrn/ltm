@@ -1,0 +1,15 @@
+<package>
+  <description brief="ar_track_alvar_msgs">
+
+     ar_track_alvar_msgs
+
+  </description>
+  <author>Venkatraman Narayanan</author>
+  <license>BSD</license>
+  <review status="unreviewed" notes=""/>
+  <url>http://ros.org/wiki/ar_track_alvar_msgs</url>
+  <depend package="geometry_msgs"/>
+
+</package>
+
+

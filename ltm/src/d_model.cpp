@@ -16,7 +16,7 @@
 // Multiplier for edge costs to avoid working with floating point numbers.
 const double kCostMultiplier = 1e3;
 // Error tolerance for comparing goal point locations.
-const double kGoalTolerance = 0.5;
+const double kGoalTolerance = 0.05;
 
 using namespace std;
 
@@ -137,8 +137,10 @@ void DModel::InitFromFile(const char* dmodel_file, double shift_x, double shift_
 
 void DModel::SetPoints(const geometry_msgs::PoseArray& points)
 {
+  points_.poses.clear();
   points_ = points;
   printf("DModel: %d points have been set.\n", int(points_.poses.size())); 
+  TFCallback(points_);
   return;
 }
 
@@ -229,7 +231,7 @@ void DModel::TFCallback(geometry_msgs::PoseArray dmodel_points)
   points.pose.orientation.w = 1;
   points.id = 0;
   points.type = visualization_msgs::Marker::SPHERE_LIST;
-  points.scale.x = points.scale.y = points.scale.z = 0.1;
+  points.scale.x = points.scale.y = points.scale.z = 0.05;
   points.color.g = points.color.b =  0.0;
   points.color.r = 1.0;
   points.color.a = 1.0;
@@ -858,6 +860,8 @@ void DModel::SetForceIndex(int force_idx)
 void DModel::SetStartState(State_t start_state)
 {
   int start_state_id = StateToStateID(start_state);
+  printf("DModel: Setting start state: %d\n", start_state_id);
+  printf("Num changed points: %d\n", start_state.changed_inds.size());
   env_cfg_.start_state_id = start_state_id;
   return; 
 }
@@ -865,6 +869,8 @@ void DModel::SetStartState(State_t start_state)
 void DModel::SetGoalState(State_t goal_state)
 {
   int goal_state_id = StateToStateID(goal_state);
+  printf("DModel: Setting goal state: %d\n",goal_state_id);
+  printf("Num changed points: %d\n", goal_state.changed_inds.size());
   env_cfg_.goal_state_id = goal_state_id;
   // TODO: This is only for single grasp plans.
   if (int(goal_state.changed_inds.size()) != 0)
@@ -932,6 +938,10 @@ void DModel::LearnDModelParameters(const vector<geometry_msgs::PoseArray>& obser
     return;
   }
   const int num_edges = int(edges.size());
+  if (edge_map_ != NULL)
+  {
+    edge_map_->clear();
+  }
   const int num_obs = int(observations.size());
   const int num_points = int(observations[0].poses.size());
 
@@ -1004,9 +1014,14 @@ void DModel::LearnDModelParameters(const vector<geometry_msgs::PoseArray>& obser
   printf("MLE Estimates:\n");
   for (int ii = 0; ii < num_edges; ++ii)
   {
+    printf("Edge: %d %d\n", edges[ii].first, edges[ii].second);
     printf("Constraint mean: %f %f %f\n", constraint_means[ii].x(),
         constraint_means[ii].y(), constraint_means[ii].z());
     cout << "Constraint cov:\n" << constraint_cov[ii] << endl;
+    double cov_det = pow(constraint_cov[ii].determinant(), 0.33);
+    double cov_trace = constraint_cov[ii].trace();
+    printf("Constraint cov det: %f\n", cov_det);
+    printf("Constraint cov trace: %f\n\n", cov_trace);
     printf("Dist mean: %f\n", dist_means[ii]);
     printf("Dist cov: %f\n\n", dist_cov[ii]);
   }
@@ -1068,10 +1083,11 @@ void DModel::LearnDModelParameters(const vector<geometry_msgs::PoseArray>& obser
   // Decision tree based on variance
   // TODO: This must be refined
   const double constraint_thresh = 0.05;
-  const double dist_thresh = 0.05;
+  const double dist_thresh = 0.15; //0.05
   for (int ii = 0; ii < num_edges; ++ii)
   {
-    double cov_det = constraint_cov[ii].determinant();
+    // double cov_det = pow(constraint_cov[ii].determinant(), 0.33);
+    double cov_det = constraint_cov[ii].trace();
     if (cov_det < constraint_thresh && dist_cov[ii] < dist_thresh)
     {
       p_rigid[ii] = 1.0;
@@ -1146,6 +1162,7 @@ void DModel::LearnDModelParameters(const vector<geometry_msgs::PoseArray>& obser
     }
     AddEdge(edges[ii], e_params);
   }
+  TFCallback(points_);
   return;
 }
 

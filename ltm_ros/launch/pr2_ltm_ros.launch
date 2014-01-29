@@ -2,15 +2,12 @@
   <master auto="start"/>
   <param name="/use_sim_time" value="false"/>
 
-  -<!-- Upload robot description to parameter server-->
-  <!--
-  <include file="$(find pr2_description)/robots/upload_pr2.launch" />
-  -->
   <!-- Bring up the AR Marker tracking node-->
-  <include file="$(find ar_track_alvar)/launch/pr2_indiv_no_kinect.launch"/>
+  <!--<include file="$(find ar_track_alvar)/launch/pr2_indiv_no_kinect.launch"/>-->
+  <!--  <include file="$(find ar_track_alvar)/launch/pr2_indiv.launch"/>-->
 
   <node pkg="ltm_ros" type="ltm_ros_node" name="ltm_ros" output="screen">
-    <param name="use_model_file" value="true"/>
+    <param name="use_model_file" value="false"/>
 
     <param name="model_file" value="$(find ltm)/matlab/models/door.mdl"/>
     <param name="model_offset_x" value="1.65"/>
@@ -28,9 +25,10 @@
     -->
 
     <param name="sim_time_step" value="0.05"/>
+    <param name="reference_frame" value="/base_link"/>
   </node>
 
-  <node pkg="tf" type="static_transform_publisher" name="map_broadcaster" args="0 0 0 0 0 0 1 /base_link /map 100" />
+  <node pkg="tf" type="static_transform_publisher" name="map_broadcaster" args="0 0 0 0 0 0 1 /base_link /map 1000" />
 
 
   <!--

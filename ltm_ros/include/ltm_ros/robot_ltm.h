@@ -48,6 +48,7 @@ class RobotLTM
     double model_offset_x_, model_offset_y_, model_offset_z_;
 
     int grasp_idx_;
+    geometry_msgs::Pose grasp_pose_;
 
     // Tracking points/ar markers
     bool ar_marker_tracking_;
