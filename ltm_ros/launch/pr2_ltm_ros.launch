@@ -24,7 +24,7 @@
     <param name="fprims_file" value="$(find ltm)/matlab/fprims/circle_40.fprim"/>
     -->
 
-    <param name="sim_time_step" value="0.05"/>
+    <param name="sim_time_step" value="0.2"/> <!--1.0-->
     <param name="reference_frame" value="/base_link"/>
   </node>
 

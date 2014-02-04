@@ -123,7 +123,10 @@ void RobotLTM::GraspCB(const geometry_msgs::PoseStampedConstPtr& grasp_pose)
   tf_listener_.transformPose(reference_frame_, *grasp_pose, grasp_pose_ref_frame);
   // Set the grasp pose, to transform the end effector trajectory later
   grasp_pose_ = grasp_pose_ref_frame.pose;
+  d_model_->AddGraspPoint(grasp_pose_);
+
   // Set grasp index by finding closest pose in dmodel points.
+  // TODO: This is redundant now.
   int closest_idx = 0;
   double min_dist = 1000;
   geometry_msgs::PoseArray points = d_model_->GetDModelPoints();
@@ -165,6 +168,7 @@ void RobotLTM::GoalCB(const geometry_msgs::PoseStampedConstPtr& goal_pose)
 
   // Offset the effector goal pose by the position of the nearest point on D-Model.
   // This assumes a rigid connection between the end-effector location and the closest D-model point
+  /*
   geometry_msgs::PoseArray points = d_model_->GetDModelPoints();
   geometry_msgs::Pose closest_point = points.poses[grasp_idx_];
   geometry_msgs::Point offset;
@@ -174,6 +178,7 @@ void RobotLTM::GoalCB(const geometry_msgs::PoseStampedConstPtr& goal_pose)
   goal_pose_ref_frame.pose.position.x -= offset.x; 
   goal_pose_ref_frame.pose.position.y -= offset.y; 
   goal_pose_ref_frame.pose.position.z -= offset.z; 
+  */
 
   goal_state.changed_inds.push_back(grasp_idx_);
   goal_state.changed_points.poses.push_back(goal_pose_ref_frame.pose);
@@ -218,8 +223,11 @@ void RobotLTM::GoalCB(const geometry_msgs::PoseStampedConstPtr& goal_pose)
   d_model_->GetEndEffectorTrajFromStateIDs(state_ids, &traj);
 
   // Transform end effector traj according to grasp pose
+  /*
   tf::Quaternion q1 = tf::Quaternion(traj.poses[0].orientation.x, traj.poses[0].orientation.y, traj.poses[0].orientation.z, traj.poses[0].orientation.w);
+tf::Quaternion q_grasp = tf::Quaternion(grasp_pose_.orientation.x, grasp_pose_.orientation.y, grasp_pose_.orientation.z, grasp_pose_.orientation.w);
   geometry_msgs::Point t1 = traj.poses[0].position;
+  tf::Quaternion q_correction = q_grasp*q1.inverse();
 
   for (size_t ii = 0; ii < traj.poses.size(); ++ii)
   {
@@ -228,8 +236,9 @@ void RobotLTM::GoalCB(const geometry_msgs::PoseStampedConstPtr& goal_pose)
     offset.y = traj.poses[ii].position.y - t1.y;
     offset.z = traj.poses[ii].position.z - t1.z;
     tf::Quaternion q2 = tf::Quaternion(traj.poses[ii].orientation.x, traj.poses[ii].orientation.y, traj.poses[ii].orientation.z, traj.poses[ii].orientation.w);
-    tf::Quaternion rotation = q2.inverse()*q1;
-    tf::Quaternion orientation = rotation * tf::Quaternion(grasp_pose_.orientation.x, grasp_pose_.orientation.y, grasp_pose_.orientation.z, grasp_pose_.orientation.w);
+    //tf::Quaternion rotation = q2.inverse()*q1;
+    //tf::Quaternion orientation = rotation * q_grasp;
+    tf::Quaternion orientation = q_correction*q2;
     traj.poses[ii].position.x  = grasp_pose_.position.x + offset.x;
     traj.poses[ii].position.y  = grasp_pose_.position.y + offset.y;
     traj.poses[ii].position.z  = grasp_pose_.position.z + offset.z;
@@ -238,7 +247,9 @@ void RobotLTM::GoalCB(const geometry_msgs::PoseStampedConstPtr& goal_pose)
     traj.poses[ii].orientation.z = orientation.z();
     traj.poses[ii].orientation.w = orientation.w();
   }
-  //plan_pub_.publish(traj);
+  */
+
+  plan_pub_.publish(traj);
 
   // Simulate plan 
   // d_model_->SimulatePlan(fprim_ids);
@@ -281,7 +292,7 @@ void RobotLTM::ARMarkersCB(const ar_track_alvar_msgs::AlvarMarkersConstPtr& ar_m
     return;
   }
   
-  const int num_tracked_markers = 8;
+  const int num_tracked_markers = 3;
   // Ensure we have same number of markers in each frame
   const int num_markers = int(ar_markers->markers.size());
   if (num_markers != num_tracked_markers)
@@ -298,14 +309,16 @@ void RobotLTM::ARMarkersCB(const ar_track_alvar_msgs::AlvarMarkersConstPtr& ar_m
       return;
     }
   }
+  /*
   vector<int> id_mappings;
   for (int ii =0; ii < num_markers; ++ii)
   {
     id_mappings.push_back(ar_markers->markers[ii].id);
   }
+  */
 
   // Update the d_model state
-  geometry_msgs::PoseArray pose_array;
+  geometry_msgs::PoseArray temp_pose_array, pose_array;
   pose_array.poses.resize(num_markers);
   for (int ii = 0; ii < num_markers; ++ii)
   {
@@ -317,14 +330,54 @@ void RobotLTM::ARMarkersCB(const ar_track_alvar_msgs::AlvarMarkersConstPtr& ar_m
     geometry_msgs::PoseStamped grasp_pose_ref_frame;
     tf_listener_.waitForTransform(ar_markers->markers[ii].header.frame_id, reference_frame_, ros::Time::now(), ros::Duration(3.0));
     tf_listener_.transformPose(reference_frame_, ar_marker_pose, grasp_pose_ref_frame);
-    auto id_map_it = find(id_mappings.begin(), id_mappings.end(), ar_markers->markers[ii].id);
-    int mapped_id = distance(id_mappings.begin(), id_map_it);
-    pose_array.poses[mapped_id] = grasp_pose_ref_frame.pose;
+    //auto id_map_it = find(id_mappings.begin(), id_mappings.end(), ar_markers->markers[ii].id);
+    //int mapped_id = distance(id_mappings.begin(), id_map_it);
+    // pose_array.poses[mapped_id] = grasp_pose_ref_frame.pose;
+    temp_pose_array.poses.push_back(grasp_pose_ref_frame.pose);
   }
+
+  if (observations_.size() != 0)
+  {
+  // Associate trackings
+  const int kKNNSearchK = 1;
+
+  // Create point cloud for first frame.
+  pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
+  cloud->width = num_markers;
+  cloud->height = 1;
+  cloud->points.resize(cloud->width * cloud->height);
+  for (size_t ii = 0; ii < num_markers; ++ii)
+  {
+    cloud->points[ii].x = temp_pose_array.poses[ii].position.x;
+    cloud->points[ii].y = temp_pose_array.poses[ii].position.y;
+    cloud->points[ii].z = temp_pose_array.poses[ii].position.z;
+  }
+
+  // Get nearest neighbors for each tracked point, in the first frame.
+  pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
+  kdtree.setInputCloud (cloud);
+
+  for (size_t ii = 0; ii < num_markers; ++ii)
+  {
+    vector<int> idxs;
+    vector<float> sqr_distances;
+    pcl::PointXYZ search_point;
+    search_point.x = observations_.back().poses[ii].position.x;
+    search_point.y = observations_.back().poses[ii].position.y;
+    search_point.z = observations_.back().poses[ii].position.z;
+    kdtree.nearestKSearch(search_point, kKNNSearchK, idxs, sqr_distances);
+    pose_array.poses[ii] = temp_pose_array.poses[idxs[0]];
+  }
+  }
+  else
+  {
+    pose_array = temp_pose_array;
+  }
+
   d_model_->SetPoints(pose_array);
 
-  // Populate observations
   observations_.push_back(pose_array);
+  //sleep(1);
   return;
 }
 
@@ -499,7 +552,7 @@ void RobotLTM::ComputeEdges(const geometry_msgs::PoseArray& pose_array)
   // Clear existing edges
   edges_.clear();
 
-  const double kKNNSearchRadius = 0.28;
+  const double kKNNSearchRadius = 0.5;
   const int kKNNSearchK = 2;
   
   const size_t num_points = pose_array.poses.size();

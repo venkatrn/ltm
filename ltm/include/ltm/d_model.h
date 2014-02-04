@@ -127,6 +127,7 @@ class DModel : public AbstractModel
 
     void AddEdge(Edge e, EdgeParams e_params);
     void AddPoint(geometry_msgs::Pose p);
+    void AddGraspPoint(geometry_msgs::Pose p);
 
     /**@brief Simulate a plan by applying a sequence of forces.
      * Uses the already set force index and simulation timestep

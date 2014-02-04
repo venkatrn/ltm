@@ -140,7 +140,7 @@ void DModel::SetPoints(const geometry_msgs::PoseArray& points)
   points_.poses.clear();
   points_ = points;
   printf("DModel: %d points have been set.\n", int(points_.poses.size())); 
-  //TFCallback(points_);
+  TFCallback(points_);
   return;
 }
 
@@ -199,16 +199,20 @@ void DModel::AddEdge(Edge e, EdgeParams e_params)
       edge_map_ = new unordered_map<Edge, EdgeParams, pair_hash>;
     }
   }
-  (*edge_map_)[e] = e_params;
   // TODO: Do this in a smarter way?
-  if (find(adj_list_[e.first].begin(), adj_list_[e.first].end(), e.second) != adj_list_[e.first].end())
+  if (find(adj_list_[e.first].begin(), adj_list_[e.first].end(), e.second) == adj_list_[e.first].end())
   {
     adj_list_[e.first].push_back(e.second);
-  }
-  if (find(adj_list_[e.second].begin(), adj_list_[e.second].end(), e.first) != adj_list_[e.second].end())
-  {
     adj_list_[e.second].push_back(e.first);
-  }
+    (*edge_map_)[e] = e_params;
+    (*edge_map_)[make_pair(e.second, e.first)] = e_params;
+   }
+  else if (e_params.joint != RIGID)
+    {
+      (*edge_map_)[e] = e_params;
+      (*edge_map_)[make_pair(e.second, e.first)] = e_params;
+    }
+
   return;
 }
 
@@ -216,6 +220,31 @@ void DModel::AddPoint(geometry_msgs::Pose p)
 {
   points_.poses.push_back(p);
   return;
+}
+
+void DModel::AddGraspPoint(geometry_msgs::Pose p)
+{
+  // This is a special case where a point can be added after the model is learnt.
+    // Find the closest point
+    double min_dist = 100000;
+    int closest_p_idx = 1;
+    for (int ii = 0; ii < points_.poses.size(); ++ii)
+    {
+    double distance = Dist(p.position, points_.poses[ii].position);
+      if (distance < min_dist)
+      {
+        min_dist = distance;
+        closest_p_idx = ii;
+      }
+    }
+    int num_points = int(points_.poses.size());
+    adj_list_.resize(num_points + 1);
+    Edge e = make_pair(num_points, closest_p_idx);
+    EdgeParams e_params(RIGID, tf::Vector3(0.0, 0.0, 0.0), 1.0);
+    AddPoint(p);
+    AddEdge(e, e_params);
+    TFCallback(points_);
+    return;
 }
 
 void DModel::TFTimedCallback(const ros::TimerEvent& event)
@@ -509,6 +538,22 @@ void DModel::GetNextState(const geometry_msgs::PoseArray& in_points, int p_idx, 
       normal.y(), normal.z());
       */
 
+  // DEBUG
+  /*
+  printf("Cluster indices:\n");
+  for (size_t ii = 0; ii < component_idxs.size(); ++ii)
+  {
+    printf("%d ", component_idxs[ii]);
+  }
+  printf("\n");
+  printf("Sep indices:\n");
+  for (size_t ii = 0; ii < sep_idxs.size(); ++ii)
+  {
+    printf("%d ", sep_idxs[ii]);
+  }
+  printf("\n");
+  */
+
   int closest_p_idx = -1;
   if (sep_idxs.size() != 0) 
   {
@@ -517,11 +562,11 @@ void DModel::GetNextState(const geometry_msgs::PoseArray& in_points, int p_idx, 
     double min_dist = 100000;
     for (size_t ii = 0; ii < sep_idxs.size(); ++ii)
     {
-      double distance = Dist(p, in_points.poses[ii].position);
+      double distance = Dist(p, in_points.poses[sep_idxs[ii]].position);
       if (distance < min_dist)
       {
         min_dist = distance;
-        closest_p_idx = ii;
+        closest_p_idx = sep_idxs[ii];
       }
     }
   }
@@ -584,19 +629,33 @@ void DModel::GetNextState(const geometry_msgs::PoseArray& in_points, int p_idx, 
       }
       transformed = true;
     }
+    // Do all computations in reference frame
     // Moment center and arm
     tf::Vector3 center(out_points->poses[closest_p_idx].position.x, out_points->poses[closest_p_idx].position.y, out_points->poses[closest_p_idx].position.z);
     tf::Vector3 p_applied(out_points->poses[p_idx].position.x, out_points->poses[p_idx].position.y, out_points->poses[p_idx].position.z);
-    tf::Vector3 arm = p_applied - center;
+    //TODO: This is a hack
+    //tf::Vector3 arm = p_applied - center;
+    tf::Vector3 arm = tf::Vector3(p_applied.x() - center.x(), p_applied.y() - center.y(), 0.0);
 
     // Project the force onto the tangent direction
     tf::Vector3 tangent = Cross(normal, arm);
-    double projection = tangent.x()*transformed_force.x() + tangent.y()*transformed_force.y() + tangent.z()*transformed_force.z();
+    //double projection = tangent.x()*transformed_force.x() + tangent.y()*transformed_force.y() + tangent.z()*transformed_force.z();
+    double projection = tangent.x()*ref_force.x() + tangent.y()*ref_force.y() + tangent.z()*ref_force.z();
+    tangent = tangent / Norm(tangent);
     tf::Vector3 projected_vector(projection*tangent.x(), projection*tangent.y(), projection*tangent.z());
     tf::Vector3 torque = Cross(arm, projected_vector);
     double torque_norm = sqrt(Sqr(torque.x()) + Sqr(torque.y()) + Sqr(torque.z()));
-
     double theta = 0.5*Sqr(del_t)*torque_norm/inertia;
+    
+    /*
+    printf("Arm: %f %f %f\n", arm.x(), arm.y(), arm.z());
+    printf("Normal: %f %f %f\n", normal.x(), normal.y(), normal.z());
+    printf("Tangent: %f %f %f\n", tangent.x(), tangent.y(), tangent.z());
+    printf("Projected vector: %f %f %f\n", projected_vector.x(), projected_vector.y(), projected_vector.z());
+    printf("Torque: %f %f %f\n", torque.x(), torque.y(), torque.z());
+    printf("Theta: %f\n", theta);
+    */
+
     tf::Quaternion quat;
     // Return
     if (torque_norm < 1e-5) 
@@ -612,7 +671,7 @@ void DModel::GetNextState(const geometry_msgs::PoseArray& in_points, int p_idx, 
       geometry_msgs::Point p = out_points->poses[component_idxs[ii]].position;
       geometry_msgs::Quaternion q = out_points->poses[component_idxs[ii]].orientation;
       tf::Vector3 point(p.x, p.y, p.z);
-      tf::Vector3 rotated_point = tr*(point - center) + center;
+      tf::Vector3 rotated_point = tr*(point-center) + center;
       out_points->poses[component_idxs[ii]].position.x = rotated_point.x();
       out_points->poses[component_idxs[ii]].position.y = rotated_point.y();
       out_points->poses[component_idxs[ii]].position.z = rotated_point.z();
@@ -746,8 +805,8 @@ void DModel::GetSuccs(int source_state_id, vector<int>* succs, vector<double>* c
     return;
   }
 
-  // VisualizeState(source_state_id);
-  // usleep(100000);
+  VisualizeState(source_state_id);
+  usleep(100000);
 
   State_t source_state = StateIDToState(source_state_id);
 
@@ -969,9 +1028,6 @@ void DModel::LearnDModelParameters(const vector<geometry_msgs::PoseArray>& obser
     for (int jj = 0; jj < num_edges; ++jj)
     {
       tf::Vector3 c_vector = GetLocalVector(observations[ii].poses[edges[jj].first], observations[ii].poses[edges[jj].second]);
-      // DEBUG
-       printf("Local vector: %f %f %f\n", c_vector.x(),
-          c_vector.y(), c_vector.z());
       const double c_vector_norm = Norm(c_vector);
       if (c_vector_norm > kFPTolerance)
       {
@@ -984,29 +1040,73 @@ void DModel::LearnDModelParameters(const vector<geometry_msgs::PoseArray>& obser
   // Compute the axis vectors for edges in two consecutive frames
   vector<vector<tf::Vector3>> axis_vectors;
   axis_vectors.resize(num_obs - 1);
+  vector<vector<tf::Vector3>> prismatic_vectors;
+  prismatic_vectors.resize(num_obs - 1);
   for (int ii = 0; ii < num_obs - 1; ++ii)
   {
     axis_vectors[ii].resize(num_edges);
+    prismatic_vectors[ii].resize(num_edges);
     for (int jj = 0; jj < num_edges; ++jj) 
     {
         axis_vectors[ii][jj] = Cross(local_vectors[ii][jj], local_vectors[ii + 1][jj]);
         const double axis_vector_norm = Norm(axis_vectors[ii][jj]);
-        if (axis_vector_norm > kFPTolerance)
+        if (axis_vector_norm > 0.1)
         {
           axis_vectors[ii][jj] = axis_vectors[ii][jj] / axis_vector_norm;
         }
-      // DEBUG
-      printf("Axis vector: %f %f %f\n", axis_vectors[ii][jj].x(),
-          axis_vectors[ii][jj].y(), axis_vectors[ii][jj].z());
+        else
+        {
+          axis_vectors[ii][jj] = 0*axis_vectors[ii][jj];
+        }
+
+        prismatic_vectors[ii][jj] = dists[ii + 1][jj]*local_vectors[ii + 1][jj] - dists[ii][jj] * local_vectors[ii][jj];
+        //TODO: This is a hack to account for sign change. 
+        if (prismatic_vectors[ii][jj].z() < 0)
+        {
+          prismatic_vectors[ii][jj] = -prismatic_vectors[ii][jj];
+        }
+
+        //if (fabs(dists[ii+1][jj]-dists[ii][jj]) < 0.01)
+        if (fabs(dists[ii+1][jj]-dists[ii][jj]) < kFPTolerance)
+        {
+          prismatic_vectors[ii][jj] = tf::Vector3(0.0, 0.0, 0.0);
+        }
+        const double prismatic_vector_norm = Norm(prismatic_vectors[ii][jj]);
+        if (prismatic_vector_norm > kFPTolerance)
+        {
+          prismatic_vectors[ii][jj] = prismatic_vectors[ii][jj] / prismatic_vector_norm;
+        }
+        else
+        {
+          prismatic_vectors[ii][jj] = 0*prismatic_vectors[ii][jj];
+        }
     }
   }
 
+      // DEBUG
+  for (int jj = 0; jj < num_edges; ++jj)
+  {
+    for (int ii = 0; ii < num_obs - 1; ++ii)
+    {
+//      printf("Axis vector: %d %d: %f %f %f\n", edges[jj].first, edges[jj].second, axis_vectors[ii][jj].x(),
+//          axis_vectors[ii][jj].y(), axis_vectors[ii][jj].z());
+      printf("Prismatic vector: %d %d: %f %f %f\n", edges[jj].first, edges[jj].second, prismatic_vectors[ii][jj].x(),
+          prismatic_vectors[ii][jj].y(), prismatic_vectors[ii][jj].z());
+      printf("Local vector 1: %d %d: %f %f %f\n", edges[jj].first, edges[jj].second, local_vectors[ii][jj].x(),
+          local_vectors[ii][jj].y(), local_vectors[ii][jj].z());
+      printf("Local vector 2: %d %d: %f %f %f\n", edges[jj].first, edges[jj].second, local_vectors[ii+1][jj].x(),
+          local_vectors[ii+1][jj].y(), local_vectors[ii+1][jj].z());
+      printf("Dists 1: %f, 2: %f\n", dists[ii][jj], dists[ii+1][jj]);
+    }
+  }
   vector<tf::Vector3> constraint_means;
   constraint_means.resize(num_edges);
   vector<double> dist_means;
   dist_means.resize(num_edges);
   vector<tf::Vector3> axis_means;
   axis_means.resize(num_edges);
+  vector<tf::Vector3> prismatic_means;
+  prismatic_means.resize(num_edges);
 
   // Estimate parameters for all joint types
   for (int ii = 0; ii < num_edges; ++ii)
@@ -1014,15 +1114,33 @@ void DModel::LearnDModelParameters(const vector<geometry_msgs::PoseArray>& obser
     constraint_means[ii] = tf::Vector3(0.0, 0.0, 0.0);
     dist_means[ii] = 0.0;
     axis_means[ii] = tf::Vector3(0.0, 0.0, 0.0);
+    prismatic_means[ii] = tf::Vector3(0.0, 0.0, 0.0);
+    int num_unique_dist_vals = 1;
     for (int jj = 0; jj < num_obs - 1; ++jj)
     {
       constraint_means[ii] = constraint_means[ii] + local_vectors[jj][ii];
+      if (fabs(dists[jj][ii] - dists[jj + 1][ii]) > 0.02)
+      {
       dist_means[ii] = dist_means[ii] + dists[jj][ii];
-      axis_means[ii] = axis_means[ii] + axis_vectors[jj][ii];
+      num_unique_dist_vals++;
+      }
+      axis_means[ii] = axis_means[ii] + axis_vectors[jj][ii];   
+      prismatic_means[ii] = prismatic_means[ii] + prismatic_vectors[jj][ii];
     }
     constraint_means[ii] = constraint_means[ii] / (num_obs - 1);
-    dist_means[ii] = dist_means[ii] / (num_obs - 1);
-    axis_means[ii] = axis_means[ii] / (num_obs - 1);
+    dist_means[ii] = dist_means[ii] / (num_unique_dist_vals);
+    //dist_means[ii] = dist_means[ii] / (num_obs - 1);
+    //axis_means[ii] = axis_means[ii] / (num_obs - 1);
+    //prismatic_means[ii] = prismatic_means[ii] / (num_obs - 1);
+    constraint_means[ii] = constraint_means[ii] / Norm(constraint_means[ii]);
+    if (Norm(axis_means[ii]) > 0.001)
+    {
+      axis_means[ii] = axis_means[ii] / Norm(axis_means[ii]);
+    }
+    if (Norm(prismatic_means[ii]) > 0.001)
+    {
+      prismatic_means[ii] = prismatic_means[ii] / Norm(prismatic_means[ii]);
+    }
   }
 
   printf("Parameter estimates:\n");
@@ -1034,6 +1152,8 @@ void DModel::LearnDModelParameters(const vector<geometry_msgs::PoseArray>& obser
         constraint_means[ii].y(), constraint_means[ii].z());
     printf("Axis mean: %f %f %f\n", axis_means[ii].x(),
         axis_means[ii].y(), axis_means[ii].z());
+    printf("Prismatic mean: %f %f %f\n", prismatic_means[ii].x(),
+        prismatic_means[ii].y(), prismatic_means[ii].z());
   }
 
   // Assign edge params for all edges
@@ -1046,14 +1166,16 @@ void DModel::LearnDModelParameters(const vector<geometry_msgs::PoseArray>& obser
   p_revolute.resize(num_edges);
 
   // Setup sensor model
-  const double kDistVar = 0.05;
-  const double kDirVar = 0.1;
+  const double kDistVar = 0.009;
+  const double kDirVar = 0.03; //0.3
+  const double kCVecVar = 0.03; //0.3
+  Eigen::Matrix3d cvec_covariance(kDirVar * Eigen::Matrix3d::Identity());
   Eigen::Matrix3d dir_covariance(kDirVar * Eigen::Matrix3d::Identity());
 
   // Priors
-  const double rigid_prior = 0.4;
-  const double prismatic_prior = 0.3;
-  const double revolute_prior = 0.3;
+  const double rigid_prior = 0.35;
+  const double prismatic_prior = 0.32;
+  const double revolute_prior = 0.32;
 
   // Bayesian inference to assign parameters
   for (int ii = 0; ii < num_edges; ++ii)
@@ -1070,34 +1192,78 @@ void DModel::LearnDModelParameters(const vector<geometry_msgs::PoseArray>& obser
       Eigen::Vector3d axis_vec(axis_vectors[jj][ii].x(),
                             axis_vectors[jj][ii].y(),
                             axis_vectors[jj][ii].z());
+      Eigen::Vector3d p_vec(prismatic_vectors[jj][ii].x(),
+                            prismatic_vectors[jj][ii].y(),
+                            prismatic_vectors[jj][ii].z());
       Eigen::Vector3d c_mu(constraint_means[ii].x(),
                            constraint_means[ii].y(),
                            constraint_means[ii].z());
+      Eigen::Vector3d p_mu(prismatic_means[ii].x(),
+                           prismatic_means[ii].y(),
+                           prismatic_means[ii].z());
       Eigen::Vector3d axis_mu(axis_means[ii].x(),
                            axis_means[ii].y(),
                            axis_means[ii].z());
 
        const double p_dist = NormalPDF(dists[jj][ii], dist_means[ii], kDistVar);
-       const double p_c_vec = MultivariateNormalPDF(c_vec, c_mu, dir_covariance);
-       // Treat redundant axis vectors as highly likely ones
+       double p_c_vec = MultivariateNormalPDF(c_vec, c_mu, cvec_covariance);
        double p_axis_vec;
-       if (fabs(axis_vectors[jj][ii].x()) < kFPTolerance &&
+      
+       if (fabs(axis_means[ii].x()) < kFPTolerance &&
+           fabs(axis_means[ii].y()) < kFPTolerance &&
+           fabs(axis_means[ii].z()) < kFPTolerance)
+       {
+         //p_axis_vec = 1.0;
+         p_axis_vec = 0.5;
+       }
+       else if (fabs(axis_vectors[jj][ii].x()) < kFPTolerance &&
            fabs(axis_vectors[jj][ii].y()) < kFPTolerance &&
            fabs(axis_vectors[jj][ii].z()) < kFPTolerance)
        {
-         p_axis_vec = MultivariateNormalPDF(axis_mu, axis_mu, dir_covariance);
+         p_axis_vec = 1.0;
        }
        else
        {
-         p_axis_vec = MultivariateNormalPDF(axis_vec, axis_mu, dir_covariance);
+         //p_axis_vec = MultivariateNormalPDF(axis_mu, axis_mu, dir_covariance);
+        p_axis_vec = MultivariateNormalPDF(axis_vec, axis_mu, dir_covariance);
+       }
+
+       double p_prismatic_vec;
+      
+       if (fabs(prismatic_means[ii].x()) < kFPTolerance &&
+           fabs(prismatic_means[ii].y()) < kFPTolerance &&
+           fabs(prismatic_means[ii].z()) < kFPTolerance)
+       {
+         //p_prismatic_vec = 1.0;
+         p_prismatic_vec = 0.5;
+       }
+       else if (fabs(prismatic_vectors[jj][ii].x()) < kFPTolerance &&
+           fabs(prismatic_vectors[jj][ii].y()) < kFPTolerance &&
+           fabs(prismatic_vectors[jj][ii].z()) < kFPTolerance)
+       {
+         p_prismatic_vec = 1.0;
+       }
+       else
+       {
+         // Account for sign change in direction vector
+         p_prismatic_vec = MultivariateNormalPDF(p_vec, p_mu, cvec_covariance);
        }
 
        // DEBUG
-       printf("%f %f %f\n", p_dist, p_c_vec, p_axis_vec);
-       p_rigid[ii] *= p_dist * p_c_vec * rigid_prior;
-       p_prismatic[ii] *= p_c_vec * prismatic_prior;
-       p_revolute[ii] *= p_axis_vec * p_dist * revolute_prior;
+       printf("%d %d: %f %f %f %f\n", p_dist, p_c_vec, p_prismatic_vec, p_axis_vec, edges[ii].first, edges[ii].second);
+       //p_rigid[ii] *= p_dist * p_c_vec;
+       if (fabs(p_prismatic_vec - 1.0) < kFPTolerance || fabs(p_axis_vec - 1.0) < kFPTolerance)
+       {
+         continue;
+       }
+       p_rigid[ii] *= p_c_vec;
+       p_prismatic[ii] *= p_prismatic_vec;
+       p_revolute[ii] *= p_axis_vec;
+       //p_revolute[ii] *= p_axis_vec * p_dist;
     }
+       p_rigid[ii] *=  rigid_prior;
+       p_prismatic[ii] *= prismatic_prior;
+       p_revolute[ii] *= revolute_prior;
 
     // Normalize the probabilties
     const double normalizer = p_rigid[ii] + p_prismatic[ii] + p_revolute[ii];
@@ -1182,27 +1348,29 @@ void DModel::LearnDModelParameters(const vector<geometry_msgs::PoseArray>& obser
     }
     else if (jt == PRISMATIC)
     {
-      e_params.normal = constraint_means[ii];
+      e_params.normal = prismatic_means[ii];
     }
-    else if (jt == PRISMATIC)
+    else if (jt == REVOLUTE)
     {
-      //TODO: I am assuming the first and last vectors are different
-      tf::Vector3 c1 = GetLocalVector(observations[0].poses[edges[ii].first], observations[0].poses[edges[ii].second]);
-      tf::Vector3 c2 = GetLocalVector(observations.back().poses[edges[ii].first], observations.back().poses[edges[ii].second]);
-      e_params.normal = Cross(c1, c2);
+      //e_params.normal = axis_means[ii];
+      e_params.normal = tf::Vector3(0.0,0.0,1);
     }
     AddEdge(edges[ii], e_params);
   }
+  PrintEdges();
   TFCallback(points_);
   return;
 }
 
 tf::Vector3 DModel::GetLocalVector(const geometry_msgs::Pose p1, const geometry_msgs::Pose p2)
 {
-  tf::Transform transform;
-  transform.setOrigin(tf::Vector3(-p1.position.x, -p1.position.y, -p1.position.z));
-  transform.setRotation(tf::Quaternion(p1.orientation.x, p1.orientation.y, p1.orientation.z, p1.orientation.w));
-  return transform(tf::Vector3(p2.position.x, p2.position.y, p2.position.z));
+  //tf::Transform transform;
+  //transform.setOrigin(tf::Vector3(-p1.position.x, -p1.position.y, -p1.position.z));
+  //transform.setRotation(tf::Quaternion(p1.orientation.x, p1.orientation.y, p1.orientation.z, p1.orientation.w));
+  //return transform(tf::Vector3(p2.position.x, p2.position.y, p2.position.z));
+  tf::Vector3 trans(p2.position.x - p1.position.x, p2.position.y - p1.position.y, p2.position.z - p1.position.z);
+  tf::Quaternion rot(p1.orientation.x, p1.orientation.y, p1.orientation.z, p1.orientation.w);
+  return tf::quatRotate(rot.inverse(), trans);
 }
 
 // Debug utilties

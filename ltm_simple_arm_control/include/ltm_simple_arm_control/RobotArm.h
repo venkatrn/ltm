@@ -79,14 +79,14 @@ class RobotRightArm
       {
         goal.trajectory.points[0].velocities[j] = 0.0;
       }
-      // To be reached 1 second after starting along the trajectory
-      goal.trajectory.points[0].time_from_start = ros::Duration(2.0);
+      // To be reached 10 seconds after starting along the trajectory
+      goal.trajectory.points[0].time_from_start = ros::Duration(10.0);
 
       //we are done; return the goal
       return goal;
     }
 
-    pr2_controllers_msgs::JointTrajectoryGoal armMultiplePointTrajectory(std::vector<double*> joint_trajectory)
+    pr2_controllers_msgs::JointTrajectoryGoal armMultiplePointTrajectory(std::vector<std::vector<double>> joint_trajectory)
     {
       pr2_controllers_msgs::JointTrajectoryGoal goal;
       goal.trajectory.joint_names.push_back("r_shoulder_pan_joint");
@@ -143,8 +143,7 @@ class RobotRightArm
               - goal.trajectory.points[i-1].positions[j]);
           if(joint_move > max_joint_move) max_joint_move = joint_move;
         }
-        //double seconds = max_joint_move/kMaxJointVel;
-        double seconds = 2.0;
+        double seconds = max_joint_move/kMaxJointVel;
         ROS_INFO("max_joint_move: %0.3f, seconds: %0.3f", max_joint_move, seconds);
         time_from_start += seconds;
         goal.trajectory.points[i].time_from_start = 

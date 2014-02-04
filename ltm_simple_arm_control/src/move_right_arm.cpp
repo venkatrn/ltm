@@ -39,10 +39,10 @@ ros::ServiceClient ik_client;
 
 ros::Publisher goal_pub;
 ros::Publisher gripper_pub;
-ros::Publisher traj_exec_pub;
 ros::Publisher learning_mode_pub;
 
 ros::Subscriber plan_sub;
+bool execute_trajectory = false;
 
 RobotRightArm* r_arm;
 
@@ -56,21 +56,19 @@ void moveArmTo(std::vector<double> angles){
   while(!r_arm->getState().isDone() && ros::ok())
   {
     printf("."); fflush(stdout);
-    //usleep(50000);
-    usleep(5000);
+    usleep(50000);
   }
   printf("done!\n"); fflush(stdout);
 }
 
-void moveArmAlong(std::vector<double*> joint_trajectory){
+void moveArmAlong(std::vector<std::vector<double>> joint_trajectory){
   r_arm->startTrajectory(r_arm->armMultiplePointTrajectory(joint_trajectory));
   printf("Moving..."); fflush(stdout);
   // Wait for trajectory completion
   while(!r_arm->getState().isDone() && ros::ok())
   {
     printf("."); fflush(stdout);
-    //usleep(50000);
-    usleep(5000);
+    usleep(50000);
   }
   printf("done!\n"); fflush(stdout);
 }
@@ -116,7 +114,8 @@ bool getRightIK(std::vector<double> ik_pose, std::vector<double> seed, std::vect
   gpik_req.timeout = ros::Duration(5.0);
   gpik_req.ik_request.ik_link_name = "r_wrist_roll_link";
 
-  gpik_req.ik_request.pose_stamped.header.frame_id = "torso_lift_link";
+  //gpik_req.ik_request.pose_stamped.header.frame_id = "torso_lift_link";
+  gpik_req.ik_request.pose_stamped.header.frame_id = "base_link";
   gpik_req.ik_request.pose_stamped.pose.position.x = ik_pose[0];
   gpik_req.ik_request.pose_stamped.pose.position.y = ik_pose[1];
   gpik_req.ik_request.pose_stamped.pose.position.z = ik_pose[2];
@@ -234,6 +233,13 @@ void CloseGripper()
 
 void planCB(const geometry_msgs::PoseArrayConstPtr& plan)
 {
+  // Do nothin if execute trajectory is not on
+  if (!execute_trajectory)
+  {
+    return;
+  }
+  // Reset execute trajectory to false
+  execute_trajectory = false;
 
   if (plan->poses.size() == 0)
   {
@@ -274,13 +280,19 @@ void planCB(const geometry_msgs::PoseArrayConstPtr& plan)
   if(getRightIK(pose, seed, angles)){
     moveArmTo(angles);
   }
+  else
+  {
+    return;
+  }
 
   // Close gripper after reaching grasp pose
   CloseGripper();
+  // Wait for gripper to close fully
+  sleep(2.0);
 
-  std::vector<double*> joint_trajectory;
+  std::vector<std::vector<double>> joint_trajectory;
   getCurrentRightArm(seed);
-  for (size_t ii = 1; ii < plan->poses.size(); ++ii)
+  for (size_t ii = 0; ii < plan->poses.size(); ++ii)
   {
     pose[0] = plan->poses[ii].position.x;
     pose[1] = plan->poses[ii].position.y;
@@ -292,12 +304,24 @@ void planCB(const geometry_msgs::PoseArrayConstPtr& plan)
     std::vector<double> traj_point(7,0);
     if(getRightIK(pose, seed, traj_point)){
       // moveArmTo(angles); 
-      joint_trajectory.push_back(&traj_point[0]);
+      joint_trajectory.push_back(traj_point);
     }
      seed.swap(angles);
   }
-  //traj_exec_pub.publish(0);
-  //moveArmAlong(joint_trajectory);
+  
+  printf("Joint Trajectory:\n");
+  for (size_t ii = 0; ii < joint_trajectory.size(); ++ii)
+  {
+        printf("%f %f %f %f %f %f %f\n", joint_trajectory[ii][0],
+            joint_trajectory[ii][1], 
+            joint_trajectory[ii][2], 
+            joint_trajectory[ii][3], 
+            joint_trajectory[ii][4], 
+            joint_trajectory[ii][5], 
+            joint_trajectory[ii][6]);
+  }
+
+  moveArmAlong(joint_trajectory);
   
   // Open the gripper after executing trajectory
   OpenGripper();
@@ -338,6 +362,7 @@ void processFeedback( const visualization_msgs::InteractiveMarkerFeedbackConstPt
     case visualization_msgs::InteractiveMarkerFeedback::MENU_SELECT:
       ROS_INFO_STREAM( s.str() << ": menu item " << feedback->menu_entry_id << " clicked" << mouse_point_ss.str() << "." );
       if(feedback->menu_entry_id == 1){
+        execute_trajectory = true;
       	goal_pose.pose.position.x = feedback->pose.position.x;
 	      goal_pose.pose.position.y = feedback->pose.position.y;
 	      goal_pose.pose.position.z = feedback->pose.position.z;
@@ -348,7 +373,6 @@ void processFeedback( const visualization_msgs::InteractiveMarkerFeedbackConstPt
 	      goal_pose.header.stamp = ros::Time::now();
 	      goal_pose.header.frame_id = feedback->header.frame_id;
 	      goal_pub.publish(goal_pose);
-        //TODO: Subscribe to published path from planner, and execute it.
       }
       if(feedback->menu_entry_id == 2){
 	      pose[0] = feedback->pose.position.x;
@@ -418,9 +442,21 @@ void processFeedback( const visualization_msgs::InteractiveMarkerFeedbackConstPt
         }
       }
       if(feedback->menu_entry_id == 8){ // Plan to goal
-      	goal_pose.pose.position.x = 0.512524;
-	      goal_pose.pose.position.y = 0.004654;
-	      goal_pose.pose.position.z = 0.092584;
+        execute_trajectory = true;
+      	gripper_pose.pose.position.x = 0.6269;
+	      gripper_pose.pose.position.y = 0.216674;
+	      gripper_pose.pose.position.z = 0.0;
+	      gripper_pose.pose.orientation.w =  0.980907;
+	      gripper_pose.pose.orientation.x = 0.0;
+	      gripper_pose.pose.orientation.y = 0.0;
+	      gripper_pose.pose.orientation.z =  0.194475;
+	      gripper_pose.header.stamp = ros::Time::now();
+	      gripper_pose.header.frame_id = feedback->header.frame_id;
+	      gripper_pub.publish(gripper_pose);
+        sleep(1);
+      	goal_pose.pose.position.x = 0.192877;
+	      goal_pose.pose.position.y = 0.122899;
+	      goal_pose.pose.position.z = 0;
 	      goal_pose.pose.orientation.w = 1.0;
 	      goal_pose.pose.orientation.x = 0.0;
 	      goal_pose.pose.orientation.y = 0.0;
@@ -652,7 +688,6 @@ int main(int argc, char** argv)
   
   goal_pub = n.advertise<geometry_msgs::PoseStamped>("goal_pose", 1);
   gripper_pub = n.advertise<geometry_msgs::PoseStamped>("gripper_pose", 1);
-  traj_exec_pub = n.advertise<std_msgs::Int32>("traj_exec", 1);
   learning_mode_pub = n.advertise<std_msgs::Int32>("learning_mode", 1);
 
   plan_sub = n.subscribe("ltm_plan", 1, &planCB);
