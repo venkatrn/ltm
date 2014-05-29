@@ -18,6 +18,7 @@ const double kFPTolerance = 1e-3;
 geometry_msgs::Point Vector3ToPoint(tf::Vector3 v);
 
 double Dist(geometry_msgs::Point p1, geometry_msgs::Point p2);
+double SqrDist(geometry_msgs::Point p1, geometry_msgs::Point p2);
 double Norm(geometry_msgs::Point p);
 double Norm(tf::Vector3 v);
 tf::Vector3 Cross(tf::Vector3 a, tf::Vector3 b);

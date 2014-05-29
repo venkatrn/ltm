@@ -19,7 +19,7 @@ int main(int argc, char** argv)
 
   // Create and set start state.
   State_t start_state;
-  d_model->SetForceIndex(132);
+  d_model->AddGraspIdx(132);
   d_model->SetStartState(start_state);
 
   // Create and set goal state.
@@ -56,7 +56,8 @@ int main(int argc, char** argv)
 
   // Print force sequence.
   vector<tf::Vector3> forces;
-  d_model->ConvertForcePrimIDsToForces(fprim_ids, &forces);
+  vector<int> grasp_points;
+  d_model->ConvertForcePrimIDsToForcePrims(fprim_ids, &forces, &grasp_points);
   printf("Force Sequence:\n");
   for (size_t ii = 0; ii < forces.size(); ++ii)
   {
@@ -76,7 +77,7 @@ int main(int argc, char** argv)
   
   
   // Simulate plan.
-  d_model->SimulatePlan(forces);
+  d_model->SimulatePlan(forces, grasp_points);
   
   delete d_model;
   delete planner;

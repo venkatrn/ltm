@@ -15,7 +15,7 @@
 
 using namespace std;
 
-const int kMaxPlannerExpansions = 300;
+const int kMaxPlannerExpansions = 1000;//1000
 
 DModelPlanner::DModelPlanner()
 {
@@ -111,15 +111,15 @@ bool DModelPlanner::Plan(vector<int>* state_ids, vector<int>* fprim_ids)
       break;
     }
     // Expand state
-    vector<int> succ_ids;
+    vector<int> succ_ids, edge_ids;
     vector<double> costs;
-    model_->GetSuccs(s.state_id, &succ_ids, &costs);
+    model_->GetSuccs(s.state_id, &succ_ids, &edge_ids, &costs);
     planner_stats_.expansions++;
     for (size_t ii = 0; ii < succ_ids.size(); ++ii)
     {
       PlannerState succ_state(succ_ids[ii], s.g + costs[ii], model_->GetGoalHeuristic(succ_ids[ii]), s.state_id);
       //TODO: This might not be the best way of storing force primitive number.
-      succ_state.edge_num = ii;
+      succ_state.edge_id = edge_ids[ii];
 
       // Skip if already in closed list
       auto it_closed = c_list.find(succ_state);
@@ -186,7 +186,7 @@ bool DModelPlanner::Plan(vector<int>* state_ids, vector<int>* fprim_ids)
   PlannerState current_state = goal_state;
   if (fprim_ids != nullptr)
   {
-    fprim_ids->push_back(current_state.edge_num);
+    fprim_ids->push_back(current_state.edge_id);
   }
   while (current_state.state_id != start_state_id_)
   {
@@ -207,7 +207,7 @@ bool DModelPlanner::Plan(vector<int>* state_ids, vector<int>* fprim_ids)
     state_ids->push_back(current_state.state_id);
     if (fprim_ids != nullptr)
     {
-      fprim_ids->push_back(current_state.edge_num);
+      fprim_ids->push_back(current_state.edge_id);
     }
   }
   // Reverse path order to get start to goal state IDs.

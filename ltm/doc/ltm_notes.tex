@@ -21,33 +21,29 @@
 \newcounter{qcounter}
 
 \date{}
-\title{\textbf{Representations for Manipulation of Articulated Objects}}
+\title{\textbf{Learning Articulation}}
 %\author{Venkatraman Narayanan}
 \maketitle
-\section*{Terminology and Notation}
-The deformable model (d-model) is a graph $G=(V,E)$ with vertices $v\in SE(3)$ and the edges
-representing the kinematic constraint between the vertices. A vertex $v$ is defined by the
-position of the point $x$ and its rotation $R$ with respect to the world frame.
-For vertices $v_i, v_j\in V$, the correspoding edge $e_{ij}=(v_i,v_j)$ is associated with three parameters $(\tau_{ij}, c_{ij}, r_{ij})$ defined by:
+\section*{Learning Model Parameters}
+Let $x_{ij}^{(t)}$ denote the position vector of $p_j$ in $p_i$'s local coordinate frame. Then,
 \begin{align*}
-  \tau_{ij} &= \begin{cases}
-  0 \mbox{ if the joint is rigid}\\
-  1 \mbox{ if the joint is prismatic} \\
-  2 \mbox{ if the joint is revolute} \\
-  3 \mbox{ if the joint is planar (no rotation)} \\
-  4 \mbox{ if the joint is cylindrical} \\
-  5 \mbox{ if the joint is planar} \\
-  6 \mbox{ if the joint is spherical} \\
-  7 \mbox{ if the joint is a helix} \\
-\end{cases}
+  a_{ij} = \frac{1}{T}\sum_{i=1}^T x_{ij}^{(t)}\\
+  c_{ij}^{prismatic} = \frac{a_{ij}}{\|a_{ij}\|}\\
+  r_{ij} = \frac{1}{T}\sum_{i=1}^T \|x_{ij}^{(t)}\|\\
 \end{align*}
-\subsection*{Rigid joint}
- $c_{ij}$ and $r_{ij}$ are undefined.
-\subsection*{Prismatic joint}
-$c_{ij}$ is the direction of motion defined by the prismatic joint. $r_{ij}$ is undefined.
-\subsection*{Revolute joint}
-$c_{ij}$ is the axis of rotation and $r_{ij}$ is the radius of rotation.
-\subsection*{Planar joint (no rotation)}
-$c_{ij}$ is the normal to the plane of motion.
-\subsection*{Spherical joint}
+TODO: Transform $\delta$ to reflect noise in the angle.
+Let $\delta$ be the observation noise variance. Then the likelihood
+\begin{align*}
+  P(x_{ij}^{(t)}|\text{prismatic}) &=  \mathcal{N}(x_{ij}^{(t)}\cdot c_{ij}^{prismatic};0, \delta)\\
+   P(x_{ij}^{(t)}|\text{revolute}) &=  \mathcal{N}(\|x_{ij}^{(t)}\|; r_{ij}, \delta)\\
+\end{align*}
+Assuming the observation probabilities of the edges at each timestep are independent given the joint types, we have:
+\begin{align*}
+  P(x_{ij}|\text{prismatic}) = \prod_{t=1}^T P(x_{ij}^{(t)}|\text{prismatic})\\
+  P(x_{ij}|\text{revolute}) = \prod_{t=1}^T P(x_{ij}^{(t)}|\text{revolute})\\
+\end{align*}
+
+TODO: penalize for model complexity
+
+  
 \end{document}

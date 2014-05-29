@@ -6,6 +6,10 @@
 #ifndef _LTM_DMODEL_H_
 #define _LTM_DMODEL_H_
 
+#define DISALLOW_COPY_AND_ASSIGN(TypeName) \
+  TypeName(const TypeName&);             \
+void operator=(const TypeName&)
+
 #include <ltm/abstract_model.h>
 #include <ltm/d_model_utils.h>
 
@@ -22,7 +26,8 @@
 
 enum JointType 
 {
-  RIGID = 0, 
+  FIXED = -1,
+  RIGID,
   PRISMATIC, 
   REVOLUTE, 
   SPHERICAL
@@ -55,10 +60,18 @@ struct EdgeParams
 
 struct State_t
 {
+  int grasp_idx; // Index of the point at which force is applied
   std::vector<int> changed_inds; // Indices of points that have changed
   geometry_msgs::PoseArray changed_points; // Coordinates of corresponding indices
   bool operator==(const State_t& s) const
   {
+    // States are different if they have different grasp idxs. Otherwise, need to check position
+    // of points.
+    if (s.grasp_idx != grasp_idx)
+    {
+      return false;
+    }
+
     for (size_t ii = 0; ii < changed_inds.size(); ++ii)
     {
       auto it = std::find(s.changed_inds.begin(), s.changed_inds.end(), changed_inds[ii]);
@@ -92,8 +105,8 @@ struct EnvCfg_t
   int start_state_id;
   int goal_state_id;
 
-  // Cache the goal grasp pose for single grasp plans.
-  geometry_msgs::Pose goal_grasp_pose;
+  // Cache the goal poses for computing heuristics
+  geometry_msgs::PoseArray goal_grasp_poses;
 
   // Timestep for quasi-static forward simulation that gives the next state of the model.
   // const double kSimTimeStep = 0.1;
@@ -105,7 +118,8 @@ class DModel : public AbstractModel
 {
   public:
     /**@brief Constructor**/
-    DModel(const std::string& reference_frame);
+    explicit DModel(const std::string& reference_frame);
+    // TODO: This constructor is deprecated until I get the gcc 4.7 compiler to work
     DModel();
 
     /**@brief Destructor**/
@@ -118,7 +132,7 @@ class DModel : public AbstractModel
      **/
     void InitFromFile(const char* dmodel_file, double shift_x, double shift_y, double shift_z);
     void InitFromFile(const char* dmodel_file);
-  
+
     /**@brief Read the force primitives from file.**/
     void InitForcePrimsFromFile(const char* fprims_file);
 
@@ -132,7 +146,7 @@ class DModel : public AbstractModel
     /**@brief Simulate a plan by applying a sequence of forces.
      * Uses the already set force index and simulation timestep
      **/
-    void SimulatePlan(const std::vector<tf::Vector3>& forces);
+    void SimulatePlan(const std::vector<tf::Vector3>& forces, const std::vector<int>& grasp_points);
     void SimulatePlan(const std::vector<int>& fprim_ids); 
 
     /**@brief Apply force at a point in the d_model**/
@@ -162,8 +176,8 @@ class DModel : public AbstractModel
     void GetNextState(const geometry_msgs::PoseArray& in_points,
         int p_idx, tf::Vector3 force, double del_t,
         geometry_msgs::PoseArray *out_points);
-    /**@brief Set the index of the point where the forces can be applied**/
-    void SetForceIndex(int force_idx);
+    /**@brief Set the indices of the point where the forces can be applied**/
+    void AddGraspIdx(int grasp_idx);
     /**@brief Set the start state.**/
     void SetStartState(State_t start_state);
     /**@brief Set the goal state (can be partially defined).
@@ -178,7 +192,8 @@ class DModel : public AbstractModel
     void SetSimTimeStep(double del_t);
 
     /**@brief Convert force primitive IDs to a sequence of forces**/
-    bool ConvertForcePrimIDsToForces(const std::vector<int>& fprim_ids, std::vector<tf::Vector3>* forces);
+    bool ConvertForcePrimIDsToForcePrims(const std::vector<int>& fprim_ids, std::vector<tf::Vector3>* forces, 
+        std::vector<int>* grasp_points);
 
     /**@brief Obtain end-effector poses from planner solution**/
     bool GetEndEffectorTrajFromStateIDs(const std::vector<int>& state_ids, geometry_msgs::PoseArray* traj);
@@ -186,6 +201,14 @@ class DModel : public AbstractModel
     /**@brief Methods for learning D-model parameters from observations**/
     void LearnDModelParameters(const std::vector<geometry_msgs::PoseArray>& observations,
         const std::vector<Edge>& edges);
+    void LearnDModelParametersExperimental(const std::vector<geometry_msgs::PoseArray>& observations,
+        const std::vector<Edge>& edges);
+
+    /**@brief Reset the state mappings**/
+    void ResetStateMap();
+
+    /**@brief For Mannequin**/
+    State_t GetStateFromStateID(int state_id);
 
   private:
     ros::NodeHandle nh;
@@ -195,16 +218,22 @@ class DModel : public AbstractModel
     std::unordered_map<Edge, EdgeParams, pair_hash>* edge_map_;
     std::vector<std::vector<int>> adj_list_;
 
+    /**@brief Mapping from State to State ID**/
+    std::unordered_map<int, State_t> StateMap;
+
     ros::Publisher points_pub_;
     ros::Publisher edges_pub_;
     ros::Publisher force_pub_;
     tf::TransformListener listener_;
-    
+
+    bool visualize_dmodel_;
+    bool visualize_expansions_;
+
     EnvCfg_t env_cfg_;
     // The force primitives that determine the successors of a state. 
     std::vector<tf::Vector3> force_primitives_;
     // Point index at which forces can be applied. 
-    int force_idx_;
+    std::vector<int> grasp_idxs_;
 
     /**@brief For a given point, find all points in the same rigid component and 
      * a set of separating points**/
@@ -217,19 +246,21 @@ class DModel : public AbstractModel
     /**@brief Return a set of successors for a given point*/
     void GetAdjPoints(int p_idx, std::vector<int>* adj_points);
 
-    /**@brief Mapping from State to State ID**/
-    std::unordered_map<int, State_t> StateMap;
-
     /**@brief State to State ID mapping**/
     int StateToStateID(State_t& s);
     /**@brief State ID to State mapping**/
     State_t StateIDToState(int state_id);
 
+    /**@brief Convert force primitive to fprim ID**/
+    int FPrimToFPrimID(int grasp_idx, int force_idx);
+    void FPrimIDToFPrim(int fprim_id, int* grasp_idx, int* force_idx);
+
     /**@brief Return true if valid state**/
     bool IsValidState(const State_t& s);
 
     /**@brief Return successor states**/
-    void GetSuccs(int source_state_id, std::vector<int>* succs, std::vector<double>* costs);
+    void GetSuccs(int source_state_id, std::vector<int>* succs, 
+        std::vector<int>* edge_ids, std::vector<double>* costs);
     /**@brief Returns true if state ID satisfies partial goal**/
     bool IsGoalState(int state_id);
 
@@ -238,6 +269,8 @@ class DModel : public AbstractModel
 
     /**@brief Return a vector expressing p2's position in p1's frame**/
     tf::Vector3 GetLocalVector(const geometry_msgs::Pose p1, const geometry_msgs::Pose p2);
+
+    DISALLOW_COPY_AND_ASSIGN(DModel);
 };
 
 #endif /* _LTM_DMODEL_H */

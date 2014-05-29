@@ -23,5 +23,5 @@ rosbuild_add_executable(control_left_arm src/control_left_arm.cpp)
 rosbuild_add_executable(move_right_arm src/move_right_arm.cpp)
 rosbuild_add_executable(move_left_arm src/move_left_arm.cpp)
 rosbuild_add_executable(move_right_arm_simple src/move_right_arm_simple.cpp)
-rosbuild_add_executable(init_cabinet src/init_cabinet.cpp)
+#rosbuild_add_executable(init_cabinet src/init_cabinet.cpp)
 

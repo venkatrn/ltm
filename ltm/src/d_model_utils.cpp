@@ -26,6 +26,11 @@ double Dist(geometry_msgs::Point p1, geometry_msgs::Point p2)
   return sqrt(Sqr(p1.x - p2.x) + Sqr(p1.y - p2.y) + Sqr(p1.z - p2.z));
 }
 
+double SqrDist(geometry_msgs::Point p1, geometry_msgs::Point p2)
+{
+  return Sqr(p1.x - p2.x) + Sqr(p1.y - p2.y) + Sqr(p1.z - p2.z);
+}
+
 double Norm(geometry_msgs::Point p)
 {
   return sqrt(Sqr(p.x) + Sqr(p.y) + Sqr(p.z));

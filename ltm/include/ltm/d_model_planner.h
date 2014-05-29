@@ -22,8 +22,8 @@ struct PlannerState
   double h;
 
   int parent_state_id;
-  // Store the edge (motion primitive) id to make reconstruction easier.
-  int edge_num;
+  // Store the motion primitive id to make reconstruction easier.
+  int edge_id;
 
   PlannerState()
   {

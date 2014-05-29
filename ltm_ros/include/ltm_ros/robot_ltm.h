@@ -16,6 +16,8 @@
 #include <kinematics_msgs/GetKinematicSolverInfo.h>
 #include <kinematics_msgs/GetPositionIK.h>
 
+#include <sensor_msgs/JointState.h>
+
 #include <ar_track_alvar_msgs/AlvarMarkers.h>
 
 #include <pviz/pviz.h>
@@ -48,7 +50,9 @@ class RobotLTM
     double model_offset_x_, model_offset_y_, model_offset_z_;
 
     int grasp_idx_;
+    std::vector<int> grasp_idxs_;
     geometry_msgs::Pose grasp_pose_;
+    State_t goal_state_;
 
     // Tracking points/ar markers
     bool ar_marker_tracking_;
@@ -68,6 +72,8 @@ class RobotLTM
  
     // Publishers
     ros::Publisher plan_pub_;
+    // TODO: This is only for mannequin
+    ros::Publisher mannequin_pub_;
 
     // Callbacks
     void ModelCB(const ltm_msgs::DModel& d_model);
@@ -86,10 +92,15 @@ class RobotLTM
     void SetModelFromFile(const char *model_file);
 
     /**@brief Simulate plan, with the PR2 robot**/
-    void SimulatePlan(const geometry_msgs::PoseArray& plan, const std::vector<int>& state_ids, const std::vector<tf::Vector3>& forces);
+    void SimulatePlan(const geometry_msgs::PoseArray& plan, const std::vector<int>& state_ids, const std::vector<tf::Vector3>& forces, const std::vector<int>& grasp_points);
 
     /**@brief Get inverse kinematics for the PR2 right arm**/
     bool GetRightIK(const std::vector<double>& ik_pose, const std::vector<double>& seed, std::vector<double>* angles);
+
+    /**@brief Mannequin hacks**/
+    void GetLShoulderAngles(geometry_msgs::Pose l_elbow_p, double* yaw, double* pitch);
+    void GetRShoulderAngles(geometry_msgs::Pose l_elbow_p, double* yaw, double* pitch);
+    void GetLElbowAngles(geometry_msgs::Pose l_elbow_p, geometry_msgs::Pose l_wrist_p, double* yaw, double* pitch);
 
     /**@brief Compute the edges between points, by doing nearest neighbor search**/
     void ComputeEdges(const geometry_msgs::PoseArray& pose_array);

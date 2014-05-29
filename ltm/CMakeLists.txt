@@ -9,6 +9,8 @@ include($ENV{ROS_ROOT}/core/rosbuild/rosbuild.cmake)
 #  MinSizeRel     : w/o debug symbols, w/ optimization, stripped binaries
 #set(ROS_BUILD_TYPE RelWithDebInfo)
 #set(CMAKE_COLOR_MAKEFILE ON)
+#SET(CMAKE_C_COMPILER "gcc-4.7")
+#SET(CMAKE_CXX_COMPILER "g++-4.7")
 set(CMAKE_CXX_FLAGS "-std=c++0x")
 
 rosbuild_init()
@@ -30,13 +32,16 @@ include_directories(${Eigen_INCLUDE_DIRS})
 rosbuild_add_library(${PROJECT_NAME}
                     src/d_model.cpp
                     src/d_model_utils.cpp
+                    src/d_model_learner.cpp
                     src/d_model_planner.cpp)
 #target_link_libraries(${PROJECT_NAME} another_library)
 #rosbuild_add_boost_directories()
 #rosbuild_link_boost(${PROJECT_NAME} thread)
 rosbuild_add_executable(test_d_model src/test/main.cpp)
 rosbuild_add_executable(test_env src/test/test_env.cpp)
-rosbuild_add_executable(test_learning src/test/test_learning.cpp)
+rosbuild_add_executable(experiments src/test/experiments.cpp)
+rosbuild_add_gtest(test/learner_utest test/learner_utest.cpp)
 target_link_libraries(test_d_model ${PROJECT_NAME})
 target_link_libraries(test_env ${PROJECT_NAME})
-target_link_libraries(test_learning ${PROJECT_NAME})
+target_link_libraries(experiments ${PROJECT_NAME})
+target_link_libraries(test/learner_utest ${PROJECT_NAME})

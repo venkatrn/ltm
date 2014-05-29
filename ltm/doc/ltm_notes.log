@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.1415926-1.40.10 (TeX Live 2009/Debian) (format=pdflatex 2013.9.6)  24 NOV 2013 17:15
+This is pdfTeX, Version 3.1415926-1.40.10 (TeX Live 2009/Debian) (format=pdflatex 2013.9.6)  3 APR 2014 11:41
 entering extended mode
  %&-line parsing enabled.
 **ltm_notes.tex
@@ -322,25 +322,26 @@ LaTeX Warning: No \author given.
 
 {/var/lib/texmf/fonts/map/pdftex/updmap/pdftex.map}] (./ltm_notes.aux) ) 
 Here is how much of TeX's memory you used:
- 3742 strings out of 493848
- 45952 string characters out of 1152824
- 131099 words of memory out of 3000000
- 6973 multiletter control sequences out of 15000+50000
- 15375 words of font info for 47 fonts, out of 3000000 for 9000
+ 3746 strings out of 493848
+ 45992 string characters out of 1152824
+ 132099 words of memory out of 3000000
+ 6975 multiletter control sequences out of 15000+50000
+ 16909 words of font info for 49 fonts, out of 3000000 for 9000
  714 hyphenation exceptions out of 8191
- 27i,14n,22p,226b,199s stack positions out of 5000i,500n,10000p,200000b,50000s
+ 27i,10n,22p,226b,199s stack positions out of 5000i,500n,10000p,200000b,50000s
 {/usr/s
 hare/texmf/fonts/enc/dvips/cm-super/cm-super-t1.enc}</usr/share/texmf-texlive/f
 onts/type1/public/amsfonts/cm/cmex10.pfb></usr/share/texmf-texlive/fonts/type1/
 public/amsfonts/cm/cmmi10.pfb></usr/share/texmf-texlive/fonts/type1/public/amsf
 onts/cm/cmmi7.pfb></usr/share/texmf-texlive/fonts/type1/public/amsfonts/cm/cmr1
-0.pfb></usr/share/texmf-texlive/fonts/type1/public/amsfonts/cm/cmsy10.pfb></usr
-/share/texmf/fonts/type1/public/cm-super/sfbx1200.pfb></usr/share/texmf/fonts/t
-ype1/public/cm-super/sfbx1440.pfb></usr/share/texmf/fonts/type1/public/cm-super
-/sfbx1728.pfb></usr/share/texmf/fonts/type1/public/cm-super/sfrm1000.pfb>
-Output written on ltm_notes.pdf (1 page, 104685 bytes).
+0.pfb></usr/share/texmf-texlive/fonts/type1/public/amsfonts/cm/cmr7.pfb></usr/s
+hare/texmf-texlive/fonts/type1/public/amsfonts/cm/cmsy10.pfb></usr/share/texmf/
+fonts/type1/public/cm-super/sfbx1200.pfb></usr/share/texmf/fonts/type1/public/c
+m-super/sfbx1440.pfb></usr/share/texmf/fonts/type1/public/cm-super/sfbx1728.pfb
+></usr/share/texmf/fonts/type1/public/cm-super/sfrm1000.pfb>
+Output written on ltm_notes.pdf (1 page, 110856 bytes).
 PDF statistics:
- 43 PDF objects out of 1000 (max. 8388607)
+ 47 PDF objects out of 1000 (max. 8388607)
  0 named destinations out of 1000 (max. 500000)
  1 words of extra memory for PDF output out of 10000 (max. 10000000)
 

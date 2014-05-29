@@ -14,8 +14,7 @@
 
 using namespace std;
 
-RobotLTM::RobotLTM() : grasp_idx_(-1),
-  ar_marker_tracking_(false)
+RobotLTM::RobotLTM() : ar_marker_tracking_(false)
 {
   ros::NodeHandle private_nh("~");
   private_nh.param("use_model_file", use_model_file_, false);
@@ -27,6 +26,8 @@ RobotLTM::RobotLTM() : grasp_idx_(-1),
   private_nh.param("model_offset_y", model_offset_y_, 0.0);
   private_nh.param("model_offset_z", model_offset_z_, 0.0);
 
+  grasp_idxs_.clear();
+
   d_model_ = new DModel(reference_frame_);
   planner_ = new DModelPlanner;
 
@@ -35,6 +36,7 @@ RobotLTM::RobotLTM() : grasp_idx_(-1),
 
   // Setup publsihers
   plan_pub_ = nh_.advertise<geometry_msgs::PoseArray>("ltm_plan", 1);
+  mannequin_pub_ = nh_.advertise<sensor_msgs::JointState>("/robot2/mannequin_joints", 1000, true);
 
   // Setup subscribers
   if (!use_model_file_)
@@ -58,6 +60,20 @@ RobotLTM::RobotLTM() : grasp_idx_(-1),
   // Initialize IK clients
   query_client_ = nh_.serviceClient<kinematics_msgs::GetKinematicSolverInfo>("pr2_right_arm_kinematics/get_ik_solver_info");
   ik_client_ = nh_.serviceClient<kinematics_msgs::GetPositionIK>("pr2_right_arm_kinematics/get_ik");
+
+  /*
+  for (int ii = 0; ii < 1000; ++ii) {
+  sensor_msgs::JointState joints_msg;
+  joints_msg.header.stamp = ros::Time::now();
+  joints_msg.name.push_back(string("LShoulderYaw"));
+  joints_msg.position.push_back(0.0); //1.07
+  joints_msg.velocity.push_back(0.0);
+  joints_msg.effort.push_back(0.0);
+  mannequin_pub_.publish(joints_msg);
+  usleep(10000);
+  }
+  */
+
 }
 
 RobotLTM::~RobotLTM() 
@@ -71,6 +87,7 @@ void RobotLTM::ModelCB(const ltm_msgs::DModel& d_model)
   // Update model (learn parameters)
   // Set start
   State_t start_state;
+  start_state.grasp_idx = 0;
   d_model_->SetStartState(start_state);
 }
 
@@ -124,35 +141,16 @@ void RobotLTM::GraspCB(const geometry_msgs::PoseStampedConstPtr& grasp_pose)
   // Set the grasp pose, to transform the end effector trajectory later
   grasp_pose_ = grasp_pose_ref_frame.pose;
   d_model_->AddGraspPoint(grasp_pose_);
-
-  // Set grasp index by finding closest pose in dmodel points.
-  // TODO: This is redundant now.
-  int closest_idx = 0;
-  double min_dist = 1000;
+  // TODO: Make this general
   geometry_msgs::PoseArray points = d_model_->GetDModelPoints();
-  for (size_t ii = 0; ii < points.poses.size(); ++ii)
-  {
-    //TODO: Include orientation
-    const double dist = Dist(grasp_pose_ref_frame.pose.position, points.poses[ii].position);
-    if (dist < min_dist)
-    {
-      min_dist = dist;
-      closest_idx = int(ii);
-    }
-  }
-  grasp_idx_ = closest_idx;
-  ROS_INFO("LTM Node: The closest point for grasp pose is %d\n", grasp_idx_);
-  d_model_->SetForceIndex(grasp_idx_);
+  grasp_idxs_.push_back(points.poses.size() - 1);
   return;
 }
 
 void RobotLTM::GoalCB(const geometry_msgs::PoseStampedConstPtr& goal_pose)
 {
-  ROS_INFO("LTM Node: Received new goal");
-  //TODO: Fake a start state for now. Should be set elsewhere
-  State_t start_state;
-  d_model_->SetStartState(start_state);
-  d_model_->SetSimTimeStep(sim_time_step_);
+  static int goal_num = 0;
+  ROS_INFO("LTM Node: Received goal %d", goal_num);
 
   // Transform goal pose to reference frame
   geometry_msgs::PoseStamped goal_pose_ref_frame;
@@ -160,37 +158,36 @@ void RobotLTM::GoalCB(const geometry_msgs::PoseStampedConstPtr& goal_pose)
   tf_listener_.transformPose(reference_frame_, *goal_pose, goal_pose_ref_frame);
 
   // Set goal
-  State_t goal_state;
-  if (grasp_idx_ == -1)
+  if (grasp_idxs_.size() == 0 || goal_num >= grasp_idxs_.size())
   {
-    ROS_INFO("LTM Node: Grasp point has not been set. Will attempt to take point nearest to goal pose as the grasp point.\n");
+    ROS_INFO("LTM Node: Grasp points have not been set, or invalid goal num\n");
   }
 
-  // Offset the effector goal pose by the position of the nearest point on D-Model.
-  // This assumes a rigid connection between the end-effector location and the closest D-model point
-  /*
-  geometry_msgs::PoseArray points = d_model_->GetDModelPoints();
-  geometry_msgs::Pose closest_point = points.poses[grasp_idx_];
-  geometry_msgs::Point offset;
-  offset.x = grasp_pose_.position.x - closest_point.position.x;
-  offset.y = grasp_pose_.position.y - closest_point.position.y;
-  offset.z = grasp_pose_.position.z - closest_point.position.z;
-  goal_pose_ref_frame.pose.position.x -= offset.x; 
-  goal_pose_ref_frame.pose.position.y -= offset.y; 
-  goal_pose_ref_frame.pose.position.z -= offset.z; 
-  */
-
-  goal_state.changed_inds.push_back(grasp_idx_);
-  goal_state.changed_points.poses.push_back(goal_pose_ref_frame.pose);
+  goal_state_.changed_inds.push_back(grasp_idxs_[goal_num]);
+  goal_state_.changed_points.poses.push_back(goal_pose_ref_frame.pose);
   ROS_INFO("LTM Node: New goal received: %f %f %f\n",
       goal_pose_ref_frame.pose.position.x, goal_pose_ref_frame.pose.position.y,
       goal_pose_ref_frame.pose.position.z);
-  d_model_->SetGoalState(goal_state);
 
+  // Wait until number of goal states is the same as number of grasp points
+  if (goal_num != grasp_idxs_.size() - 1)
+  {
+    goal_num++;
+    return;
+  }
+
+
+  //TODO: Fake a start state for now. Should be set elsewhere
+  State_t start_state;
+  start_state.grasp_idx = grasp_idxs_[0];
+  d_model_->SetStartState(start_state);
+  d_model_->SetSimTimeStep(sim_time_step_);
+
+  d_model_->SetGoalState(goal_state_);
 
   // Plan
   planner_->SetStart(d_model_->GetStartStateID());
-  planner_->SetEpsilon(1000.0);
+  planner_->SetEpsilon(1000.0);//1000
   vector<int> state_ids, fprim_ids;
   if (!planner_->Plan(&state_ids, &fprim_ids))
   {
@@ -200,8 +197,10 @@ void RobotLTM::GoalCB(const geometry_msgs::PoseStampedConstPtr& goal_pose)
 
   // Get forces from fprim_ids
   vector<tf::Vector3> forces;
+  vector<int> grasp_points;
   forces.clear();
-  d_model_->ConvertForcePrimIDsToForces(fprim_ids, &forces);
+  grasp_points.clear();
+  d_model_->ConvertForcePrimIDsToForcePrims(fprim_ids, &forces, &grasp_points);
 
   /*
   printf("Force Sequence:\n");
@@ -222,38 +221,12 @@ void RobotLTM::GoalCB(const geometry_msgs::PoseStampedConstPtr& goal_pose)
   geometry_msgs::PoseArray traj;
   d_model_->GetEndEffectorTrajFromStateIDs(state_ids, &traj);
 
-  // Transform end effector traj according to grasp pose
-  /*
-  tf::Quaternion q1 = tf::Quaternion(traj.poses[0].orientation.x, traj.poses[0].orientation.y, traj.poses[0].orientation.z, traj.poses[0].orientation.w);
-tf::Quaternion q_grasp = tf::Quaternion(grasp_pose_.orientation.x, grasp_pose_.orientation.y, grasp_pose_.orientation.z, grasp_pose_.orientation.w);
-  geometry_msgs::Point t1 = traj.poses[0].position;
-  tf::Quaternion q_correction = q_grasp*q1.inverse();
-
-  for (size_t ii = 0; ii < traj.poses.size(); ++ii)
-  {
-    geometry_msgs::Point offset; 
-    offset.x = traj.poses[ii].position.x - t1.x;
-    offset.y = traj.poses[ii].position.y - t1.y;
-    offset.z = traj.poses[ii].position.z - t1.z;
-    tf::Quaternion q2 = tf::Quaternion(traj.poses[ii].orientation.x, traj.poses[ii].orientation.y, traj.poses[ii].orientation.z, traj.poses[ii].orientation.w);
-    //tf::Quaternion rotation = q2.inverse()*q1;
-    //tf::Quaternion orientation = rotation * q_grasp;
-    tf::Quaternion orientation = q_correction*q2;
-    traj.poses[ii].position.x  = grasp_pose_.position.x + offset.x;
-    traj.poses[ii].position.y  = grasp_pose_.position.y + offset.y;
-    traj.poses[ii].position.z  = grasp_pose_.position.z + offset.z;
-    traj.poses[ii].orientation.x = orientation.x();
-    traj.poses[ii].orientation.y = orientation.y();
-    traj.poses[ii].orientation.z = orientation.z();
-    traj.poses[ii].orientation.w = orientation.w();
-  }
-  */
 
   plan_pub_.publish(traj);
 
   // Simulate plan 
   // d_model_->SimulatePlan(fprim_ids);
-  SimulatePlan(traj, state_ids, forces);
+  SimulatePlan(traj, state_ids, forces, grasp_points);
 
   //Print end effector trajectory
   printf("End-Effector Trajectory:\n");
@@ -263,6 +236,11 @@ tf::Quaternion q_grasp = tf::Quaternion(grasp_pose_.orientation.x, grasp_pose_.o
         traj.poses[ii].orientation.x, traj.poses[ii].orientation.y, traj.poses[ii].orientation.z, traj.poses[ii].orientation.w);
   }
   printf("\n");
+
+  // Reset goal state
+  goal_num = 0;
+  goal_state_.changed_inds.clear();
+  goal_state_.changed_points.poses.clear();
 
   return;
 }
@@ -384,14 +362,19 @@ void RobotLTM::ARMarkersCB(const ar_track_alvar_msgs::AlvarMarkersConstPtr& ar_m
 void RobotLTM::SetModelFromFile(const char *model_file)
 {
   d_model_->InitFromFile(model_file, model_offset_x_, model_offset_y_, model_offset_z_); 
+  /*
   // Set start
   State_t start_state;
+  start_state.grasp_idx = 0;
   d_model_->SetStartState(start_state);
+  */
 }
 
-void RobotLTM::SimulatePlan(const geometry_msgs::PoseArray& plan, const vector<int>& state_ids, const vector<tf::Vector3>& forces)
+void RobotLTM::SimulatePlan(const geometry_msgs::PoseArray& plan, const vector<int>& state_ids, const vector<tf::Vector3>& forces, const vector<int>& grasp_points)
 {
   // TODO: Check that plan and forces are of equal length
+  printf("Num States: %d, Num Forces: %d\n", state_ids.size(), forces.size());
+  // TODO: This needs to reason about change of grsp point
   
   vector<double> pose(7,0);
   vector<double> seed(7,0);
@@ -418,23 +401,32 @@ void RobotLTM::SimulatePlan(const geometry_msgs::PoseArray& plan, const vector<i
   }
 
   vector<double> base_pos(6,0);
-  const double torso_pos = 0.3;
+  const double torso_pos = 0.3; //0.3
   const double hue = 0.5;
   const string ns = "ltm_plan";
   const bool use_pr2_mesh = true;
   
   const double standoff = 0.0; //0.15
 
-  for (size_t ii = 0; ii < forces.size(); ++ii)
+  int last_grasp_idx = -1, current_grasp_idx = -1;
+  geometry_msgs::Pose last_grasp_pose, current_grasp_pose;
+  for (size_t ii = 0; ii < state_ids.size(); ++ii)
   {
     // Get the IK for the end-effector
     pose[0] = plan.poses[ii].position.x - standoff;
     pose[1] = plan.poses[ii].position.y;
     pose[2] = plan.poses[ii].position.z;
+    // TODO: Mannequin hack
+    /*
     pose[3] = plan.poses[ii].orientation.w;
     pose[4] = plan.poses[ii].orientation.x;
     pose[5] = plan.poses[ii].orientation.y;
     pose[6] = plan.poses[ii].orientation.z;
+    */
+    pose[3] = 1.0;
+    pose[4] = 0.0;
+    pose[5] = 0.0;
+    pose[6] = 0.0;
 
     if (GetRightIK(pose, seed, &r_angles))
     {
@@ -455,24 +447,131 @@ void RobotLTM::SimulatePlan(const geometry_msgs::PoseArray& plan, const vector<i
     {
       initial_r_angles = r_angles;
     }
+    
+    // Mannequin stuff
+    geometry_msgs::PoseArray points = d_model_->GetDModelPoints();
+    State_t s = d_model_->GetStateFromStateID(state_ids[ii]);
+    current_grasp_pose = plan.poses[ii];
+    current_grasp_idx = s.grasp_idx;
+
+    if (ii != 0 && current_grasp_idx != last_grasp_idx)
+    {
+      int timesteps = 100;
+      for (int t = 1; t <= timesteps; ++t)
+      {
+        // Get the IK for the end-effector
+        pose[0] = last_grasp_pose.position.x + t * (current_grasp_pose.position.x - last_grasp_pose.position.x) / timesteps;
+        pose[1] = last_grasp_pose.position.y + t * (current_grasp_pose.position.y - last_grasp_pose.position.y) / timesteps;
+        pose[2] = last_grasp_pose.position.z + t * (current_grasp_pose.position.z - last_grasp_pose.position.z) / timesteps;
+        pose[3] = 1.0;
+        pose[4] = 0.0;
+        pose[5] = 0.0;
+        pose[6] = 0.0;
+
+        if (GetRightIK(pose, seed, &r_angles))
+        {
+          pviz_.visualizeRobot(r_angles,
+              l_angles,
+              base_pos,  // 0: x, 1: y,  2: theta,  3: head_pan,  4: head_tilt,  5: laser_tilt
+              torso_pos, 
+              hue,
+              ns, 1, use_pr2_mesh);
+        }
+        else
+        {
+          ROS_ERROR("LTM Node: Could not get IK while simulating");
+          //return;
+        }
+
+      }
+      usleep(1000000);
+    }
+
+
+    geometry_msgs::Pose l_elbow_pose, r_elbow_pose, l_wrist_pose;
+    auto it = find(s.changed_inds.begin(),
+        s.changed_inds.end(),   
+        5);
+    if ( it != s.changed_inds.end())
+    { 
+      int offset = distance(s.changed_inds.begin(), it);                                                               
+      l_elbow_pose = s.changed_points.poses[offset];                                                                     
+    } 
+    else                                                                                                               
+    { 
+      l_elbow_pose = points.poses[5];
+    }
+
+    it = find(s.changed_inds.begin(),
+        s.changed_inds.end(),   
+        6);
+    if ( it != s.changed_inds.end())
+    { 
+      int offset = distance(s.changed_inds.begin(), it);                                                               
+      r_elbow_pose = s.changed_points.poses[offset];                                                                     
+    } 
+    else                                                                                                               
+    { 
+      r_elbow_pose = points.poses[6];
+    }
+
+    double ls_yaw, ls_pitch, le_yaw, le_pitch;
+    double rs_yaw, rs_pitch, re_yaw, re_pitch;
+    GetLShoulderAngles(l_elbow_pose, &ls_yaw, &ls_pitch);
+    GetRShoulderAngles(r_elbow_pose, &rs_yaw, &rs_pitch);
+    GetLElbowAngles(l_elbow_pose, l_wrist_pose, &le_yaw, &le_pitch);
+    printf("%f %f\n", le_yaw, le_pitch); 
+    for (int ii = 0; ii < 10; ++ii) {
+      sensor_msgs::JointState joints_msg;
+      joints_msg.header.stamp = ros::Time::now();
+
+      joints_msg.name.push_back(string("LShoulderYaw"));
+      joints_msg.position.push_back(ls_yaw); //1.07
+      joints_msg.velocity.push_back(0.0);
+      joints_msg.effort.push_back(0.0);
+
+      joints_msg.name.push_back(string("LShoulderPitch"));
+      joints_msg.position.push_back(0); //1.07
+      joints_msg.velocity.push_back(0.0);
+      joints_msg.effort.push_back(0.0);
+
+      joints_msg.name.push_back(string("RShoulderYaw"));
+      joints_msg.position.push_back(rs_yaw); //1.07
+      joints_msg.velocity.push_back(0.0);
+      joints_msg.effort.push_back(0.0);
+
+      joints_msg.name.push_back(string("RShoulderPitch"));
+      joints_msg.position.push_back(0); //1.07
+      joints_msg.velocity.push_back(0.0);
+      joints_msg.effort.push_back(0.0);
+
+      mannequin_pub_.publish(joints_msg);
+      usleep(10000);
+
+    last_grasp_idx = s.grasp_idx;
+    last_grasp_pose = current_grasp_pose;
+    }
+
 
     // Draw the model at next timestep
     // d_model_->ApplyForce(grasp_idx_, forces[ii], sim_time_step_);
     d_model_->VisualizeState(state_ids[ii]);
     
-    seed.swap(r_angles);
+    //seed.swap(r_angles);
     usleep(100000);
   }
 
   // Visualize the initial state after running through simulation
   sleep(2);
   d_model_->VisualizeState(state_ids[0]);
+  /*
   pviz_.visualizeRobot(initial_r_angles,
       l_angles,
       base_pos,  // 0: x, 1: y,  2: theta,  3: head_pan,  4: head_tilt,  5: laser_tilt
       torso_pos, 
       hue,
       ns, 1, use_pr2_mesh);
+      */
   return;
 }
 
@@ -545,6 +644,48 @@ bool RobotLTM::GetRightIK(const vector<double>& ik_pose, const vector<double>& s
     return false; 
   }
   return false;
+}
+
+
+void RobotLTM::GetLShoulderAngles(geometry_msgs::Pose p, double* yaw, double* pitch)
+{
+  geometry_msgs::PoseArray points = d_model_->GetDModelPoints();
+  geometry_msgs::Pose l_shoulder_pose = points.poses[3];
+  geometry_msgs::Pose r_shoulder_pose = points.poses[4];
+  geometry_msgs::Pose l_elbow_pose = points.poses[5];
+  geometry_msgs::Pose r_elbow_pose = points.poses[6];
+  double x = p.position.x - l_shoulder_pose.position.x;
+  double y = p.position.y - l_shoulder_pose.position.y;
+  double z = p.position.z - l_shoulder_pose.position.z;
+  *yaw = atan(y/x);
+  *pitch = atan(sqrt(Sqr(x) + Sqr(y))/z);
+  return;
+}
+
+void RobotLTM::GetRShoulderAngles(geometry_msgs::Pose p, double* yaw, double* pitch)
+{
+  geometry_msgs::PoseArray points = d_model_->GetDModelPoints();
+  geometry_msgs::Pose l_shoulder_pose = points.poses[3];
+  geometry_msgs::Pose r_shoulder_pose = points.poses[4];
+  geometry_msgs::Pose l_elbow_pose = points.poses[5];
+  geometry_msgs::Pose r_elbow_pose = points.poses[6];
+  double x = p.position.x - r_shoulder_pose.position.x;
+  double y = p.position.y - r_shoulder_pose.position.y;
+  double z = p.position.z - r_shoulder_pose.position.z;
+  *yaw = atan(y/x);
+  *pitch = atan(sqrt(Sqr(x) + Sqr(y))/z);
+  return;
+}
+
+void RobotLTM::GetLElbowAngles(geometry_msgs::Pose l_elbow_pose, geometry_msgs::Pose p, double* yaw, double* pitch)
+{
+  geometry_msgs::PoseArray points = d_model_->GetDModelPoints();
+  double x = p.position.x - l_elbow_pose.position.x;
+  double y = p.position.y - l_elbow_pose.position.y;
+  double z = p.position.z - l_elbow_pose.position.z;
+  *yaw = atan(y/x);
+  *pitch = atan(sqrt(Sqr(x) + Sqr(y))/z);
+  return;
 }
 
 void RobotLTM::ComputeEdges(const geometry_msgs::PoseArray& pose_array)

@@ -442,21 +442,46 @@ void processFeedback( const visualization_msgs::InteractiveMarkerFeedbackConstPt
         }
       }
       if(feedback->menu_entry_id == 8){ // Plan to goal
-        execute_trajectory = true;
-      	gripper_pose.pose.position.x = 0.6269;
-	      gripper_pose.pose.position.y = 0.216674;
-	      gripper_pose.pose.position.z = 0.0;
-	      gripper_pose.pose.orientation.w =  0.980907;
+        // Mannequin example
+        execute_trajectory = false;
+      	gripper_pose.pose.position.x = 0.55;
+	      gripper_pose.pose.position.y = -0.2;
+	      gripper_pose.pose.position.z = 0.2;
+	      gripper_pose.pose.orientation.w =  1.0;
 	      gripper_pose.pose.orientation.x = 0.0;
 	      gripper_pose.pose.orientation.y = 0.0;
-	      gripper_pose.pose.orientation.z =  0.194475;
+	      gripper_pose.pose.orientation.z =  0.0;
 	      gripper_pose.header.stamp = ros::Time::now();
 	      gripper_pose.header.frame_id = feedback->header.frame_id;
 	      gripper_pub.publish(gripper_pose);
         sleep(1);
-      	goal_pose.pose.position.x = 0.192877;
-	      goal_pose.pose.position.y = 0.122899;
-	      goal_pose.pose.position.z = 0;
+      	gripper_pose.pose.position.x = 0.55;
+	      gripper_pose.pose.position.y = 0.2;
+	      gripper_pose.pose.position.z = 0.2;
+	      gripper_pose.pose.orientation.w =  1.0;
+	      gripper_pose.pose.orientation.x = 0.0;
+	      gripper_pose.pose.orientation.y = 0.0;
+	      gripper_pose.pose.orientation.z =  0.0;
+	      gripper_pose.header.stamp = ros::Time::now();
+	      gripper_pose.header.frame_id = feedback->header.frame_id;
+	      gripper_pub.publish(gripper_pose);
+        sleep(1);
+        /*
+      	gripper_pose.pose.position.x = 0.35;
+	      gripper_pose.pose.position.y = -0.2;
+	      gripper_pose.pose.position.z = 0.2;
+	      gripper_pose.pose.orientation.w =  1.0;
+	      gripper_pose.pose.orientation.x = 0.0;
+	      gripper_pose.pose.orientation.y = 0.0;
+	      gripper_pose.pose.orientation.z =  0.0;
+	      gripper_pose.header.stamp = ros::Time::now();
+	      gripper_pose.header.frame_id = feedback->header.frame_id;
+	      gripper_pub.publish(gripper_pose);
+        sleep(1);
+        */
+      	goal_pose.pose.position.x = 0.75;
+	      goal_pose.pose.position.y = -0.4;
+	      goal_pose.pose.position.z = 0.2;
 	      goal_pose.pose.orientation.w = 1.0;
 	      goal_pose.pose.orientation.x = 0.0;
 	      goal_pose.pose.orientation.y = 0.0;
@@ -464,6 +489,30 @@ void processFeedback( const visualization_msgs::InteractiveMarkerFeedbackConstPt
 	      goal_pose.header.stamp = ros::Time::now();
 	      goal_pose.header.frame_id = feedback->header.frame_id;
 	      goal_pub.publish(goal_pose);
+        sleep(1);
+      	goal_pose.pose.position.x = 0.75;
+	      goal_pose.pose.position.y = 0.4;
+	      goal_pose.pose.position.z = 0.2;
+	      goal_pose.pose.orientation.w = 1.0;
+	      goal_pose.pose.orientation.x = 0.0;
+	      goal_pose.pose.orientation.y = 0.0;
+	      goal_pose.pose.orientation.z = 0.0;
+	      goal_pose.header.stamp = ros::Time::now();
+	      goal_pose.header.frame_id = feedback->header.frame_id;
+	      goal_pub.publish(goal_pose);
+        sleep(1);
+        /*
+      	goal_pose.pose.position.x = 0.75;
+	      goal_pose.pose.position.y = -0.4; //
+	      goal_pose.pose.position.z = -0.0; //-0.2
+	      goal_pose.pose.orientation.w = 1.0;
+	      goal_pose.pose.orientation.x = 0.0;
+	      goal_pose.pose.orientation.y = 0.0;
+	      goal_pose.pose.orientation.z = 0.0;
+	      goal_pose.header.stamp = ros::Time::now();
+	      goal_pose.header.frame_id = feedback->header.frame_id;
+	      goal_pub.publish(goal_pose);
+        */
       }
       if(feedback->menu_entry_id == 9){ // Begin learning
         std_msgs::Int32 learning_mode;
