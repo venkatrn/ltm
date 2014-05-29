@@ -45,9 +45,11 @@ class RobotLTM
     bool use_model_file_;
     std::string model_file_;
     std::string fprims_file_;
+    std::string obs_file_;
     std::string reference_frame_;
     double sim_time_step_;
     double model_offset_x_, model_offset_y_, model_offset_z_;
+    bool enforce_spatial_association_;
 
     int grasp_idx_;
     std::vector<int> grasp_idxs_;
@@ -89,7 +91,10 @@ class RobotLTM
     void ARMarkersCB(const ar_track_alvar_msgs::AlvarMarkersConstPtr& ar_markers);
 
     /**@brief Method to initialize DModel from file**/
-    void SetModelFromFile(const char *model_file);
+    void SetModelFromFile(const char* model_file);
+
+    /**@brief Save the observations to file**/
+    void SaveObservationsToFile(const char* obs_file);
 
     /**@brief Simulate plan, with the PR2 robot**/
     void SimulatePlan(const geometry_msgs::PoseArray& plan, const std::vector<int>& state_ids, const std::vector<tf::Vector3>& forces, const std::vector<int>& grasp_points);

@@ -18,8 +18,10 @@ RobotLTM::RobotLTM() : ar_marker_tracking_(false)
 {
   ros::NodeHandle private_nh("~");
   private_nh.param("use_model_file", use_model_file_, false);
+  private_nh.param("enforce_spatial_association", enforce_spatial_association_, false);
   private_nh.param("model_file", model_file_, string(""));
   private_nh.param("fprims_file", fprims_file_, string(""));
+  private_nh.param("obs_file", obs_file_, string("observations.txt"));
   private_nh.param("reference_frame", reference_frame_, string("/map"));
   private_nh.param("sim_time_step", sim_time_step_, 0.1);
   private_nh.param("model_offset_x", model_offset_x_, 0.0);
@@ -122,10 +124,12 @@ void RobotLTM::LearnCB(const std_msgs::Int32ConstPtr& learning_mode)
           "No model will be learnt");
       return;
     }
+    SaveObservationsToFile(obs_file_.c_str());
 
     ComputeEdges(observations_[0]);
     ROS_INFO("LTM Node: Number of edges in model: %d", int(edges_.size()));
-    d_model_->LearnDModelParameters(observations_, edges_);
+    // TODO: Not using the old learning method currently
+    // d_model_->LearnDModelParameters(observations_, edges_);
     return;
   }
 }
@@ -270,19 +274,25 @@ void RobotLTM::ARMarkersCB(const ar_track_alvar_msgs::AlvarMarkersConstPtr& ar_m
     return;
   }
   
-  const int num_tracked_markers = 3;
   // Ensure we have same number of markers in each frame
   const int num_markers = int(ar_markers->markers.size());
+
+  // This is a hack (assuming fixed number of markers)
+  /*
+  const int num_tracked_markers = 3;
   if (num_markers != num_tracked_markers)
   {
     return;
   }
+  */
+
+  // We will assume that the first frame contains all the markers we want to track
   if (int(observations_.size()) != 0)
   {
-    // if (num_markers != int(observations_[0].poses.size()))
-    if (num_markers != num_tracked_markers)
+    if (num_markers != int(observations_[0].poses.size()))
+    // if (num_markers != num_tracked_markers) // Hack
     {
-      ROS_INFO("LTM Node: Number of markers ,%d in current frame does not match number being tracked %d. Skipping observation",
+      ROS_WARN("LTM Node: Number of markers ,%d in current frame does not match number being tracked %d. Dropping observation",
           num_markers, int(observations_[0].poses.size()));
       return;
     }
@@ -314,38 +324,38 @@ void RobotLTM::ARMarkersCB(const ar_track_alvar_msgs::AlvarMarkersConstPtr& ar_m
     temp_pose_array.poses.push_back(grasp_pose_ref_frame.pose);
   }
 
-  if (observations_.size() != 0)
+  if (enforce_spatial_association_ && observations_.size() != 0)
   {
-  // Associate trackings
-  const int kKNNSearchK = 1;
+    // Associate trackings
+    const int kKNNSearchK = 1;
 
-  // Create point cloud for first frame.
-  pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
-  cloud->width = num_markers;
-  cloud->height = 1;
-  cloud->points.resize(cloud->width * cloud->height);
-  for (size_t ii = 0; ii < num_markers; ++ii)
-  {
-    cloud->points[ii].x = temp_pose_array.poses[ii].position.x;
-    cloud->points[ii].y = temp_pose_array.poses[ii].position.y;
-    cloud->points[ii].z = temp_pose_array.poses[ii].position.z;
-  }
+    // Create point cloud for first frame.
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
+    cloud->width = num_markers;
+    cloud->height = 1;
+    cloud->points.resize(cloud->width * cloud->height);
+    for (size_t ii = 0; ii < num_markers; ++ii)
+    {
+      cloud->points[ii].x = temp_pose_array.poses[ii].position.x;
+      cloud->points[ii].y = temp_pose_array.poses[ii].position.y;
+      cloud->points[ii].z = temp_pose_array.poses[ii].position.z;
+    }
 
-  // Get nearest neighbors for each tracked point, in the first frame.
-  pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
-  kdtree.setInputCloud (cloud);
+    // Get nearest neighbors for each tracked point, in the first frame.
+    pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
+    kdtree.setInputCloud (cloud);
 
-  for (size_t ii = 0; ii < num_markers; ++ii)
-  {
-    vector<int> idxs;
-    vector<float> sqr_distances;
-    pcl::PointXYZ search_point;
-    search_point.x = observations_.back().poses[ii].position.x;
-    search_point.y = observations_.back().poses[ii].position.y;
-    search_point.z = observations_.back().poses[ii].position.z;
-    kdtree.nearestKSearch(search_point, kKNNSearchK, idxs, sqr_distances);
-    pose_array.poses[ii] = temp_pose_array.poses[idxs[0]];
-  }
+    for (size_t ii = 0; ii < num_markers; ++ii)
+    {
+      vector<int> idxs;
+      vector<float> sqr_distances;
+      pcl::PointXYZ search_point;
+      search_point.x = observations_.back().poses[ii].position.x;
+      search_point.y = observations_.back().poses[ii].position.y;
+      search_point.z = observations_.back().poses[ii].position.z;
+      kdtree.nearestKSearch(search_point, kKNNSearchK, idxs, sqr_distances);
+      pose_array.poses[ii] = temp_pose_array.poses[idxs[0]];
+    }
   }
   else
   {
@@ -368,6 +378,28 @@ void RobotLTM::SetModelFromFile(const char *model_file)
   start_state.grasp_idx = 0;
   d_model_->SetStartState(start_state);
   */
+}
+
+void RobotLTM::SaveObservationsToFile(const char* obs_file)
+{
+  FILE* f_obs = fopen(obs_file, "w");
+  const int num_frames = int(observations_.size());
+  assert(num_frames > 0);
+  const int num_points = int(observations_[0].poses.size());
+  fprintf(f_obs, "points: %d\n", num_points);
+  fprintf(f_obs, "frames: %d\n", num_frames);
+  for (int ii = 0; ii < num_frames; ++ii)
+  {
+    for (int jj = 0; jj < num_points; ++jj)
+    {
+      geometry_msgs::Pose p = observations_[ii].poses[jj];
+      fprintf(f_obs, "%f %f %f %f %f %f %f\n", p.position.x, p.position.y, p.position.z,
+          p.orientation.x, p.orientation.y, p.orientation.z, p.orientation.w);
+    }
+    printf("\n");
+  }
+  fclose(f_obs);
+  ROS_INFO("Saved observations to file %s\n", obs_file);
 }
 
 void RobotLTM::SimulatePlan(const geometry_msgs::PoseArray& plan, const vector<int>& state_ids, const vector<tf::Vector3>& forces, const vector<int>& grasp_points)
