@@ -4,32 +4,16 @@
 
   <!-- Bring up the AR Marker tracking node-->
   <!--<include file="$(find ar_track_alvar)/launch/pr2_indiv_no_kinect.launch"/>-->
-  <!--  <include file="$(find ar_track_alvar)/launch/pr2_indiv.launch"/>-->
+  <include file="$(find ar_track_alvar)/launch/pr2_indiv.launch"/>
 
   <node pkg="ltm_ros" type="ltm_ros_node" name="ltm_ros" output="screen">
     <param name="use_model_file" value="false"/>
-
-    <param name="model_file" value="$(find ltm)/matlab/models/door.mdl"/>
-    <param name="model_offset_x" value="1.65"/>
-    <param name="model_offset_y" value="0.0"/>
-    <param name="model_offset_z" value="1.0"/>
     <param name="fprims_file" value="$(find ltm)/matlab/fprims/circle_40.fprim"/>
-
-    <!--
-    <param name="model_file" value="$(find ltm)/matlab/models/drawer_small.mdl"/>
-    <param name="model_offset_x" value="-0.2"/>
-    <param name="model_offset_y" value="0.0"/>
-    <param name="model_offset_z" value="0.0"/>
-    <param name="fprims_file" value="$(find ltm)/matlab/fprims/linear_4.fprim"/>
-    <param name="fprims_file" value="$(find ltm)/matlab/fprims/circle_40.fprim"/>
-    -->
-
     <param name="sim_time_step" value="0.2"/> <!--1.0-->
     <param name="reference_frame" value="/base_link"/>
   </node>
 
   <node pkg="tf" type="static_transform_publisher" name="map_broadcaster" args="0 0 0 0 0 0 1 /base_link /map 1000" />
-
 
   <!--
   <node pkg="ar_pose" type="ar_multi" name="ar_multi">
@@ -41,6 +25,5 @@
     <param name="publish_tf" value="true"/>
   </node>
   -->
-
 
 </launch>
