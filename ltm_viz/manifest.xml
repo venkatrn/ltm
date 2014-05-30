@@ -1,0 +1,17 @@
+<package>
+  <description brief="ltm_viz">
+
+     ltm_viz
+
+  </description>
+  <author>Venkatraman Narayanan</author>
+  <license>BSD</license>
+  <review status="unreviewed" notes=""/>
+  <url>http://ros.org/wiki/ltm_viz</url>
+
+  <depend package="ltm"/>
+  <depend package="geometry_msgs"/>
+
+</package>
+
+

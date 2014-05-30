@@ -32,7 +32,6 @@ enum JointType
   REVOLUTE, 
   SPHERICAL
 };
-typedef std::pair<int, int> Edge;
 
 struct pair_hash {
   size_t operator() (const std::pair<int, int>& p) const
@@ -57,6 +56,9 @@ struct EdgeParams
     rad = r;
   }
 };
+
+typedef std::pair<int, int> Edge;
+typedef std::unordered_map<Edge, EdgeParams, pair_hash> EdgeMap;
 
 struct State_t
 {
@@ -215,7 +217,7 @@ class DModel : public AbstractModel
     std::string reference_frame_;
     geometry_msgs::PoseArray points_;
     /**@brief Mapping from (i,j) to edge(i,j)**/
-    std::unordered_map<Edge, EdgeParams, pair_hash>* edge_map_;
+    EdgeMap* edge_map_;
     std::vector<std::vector<int>> adj_list_;
 
     /**@brief Mapping from State to State ID**/
