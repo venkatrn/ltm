@@ -514,12 +514,12 @@ void processFeedback( const visualization_msgs::InteractiveMarkerFeedbackConstPt
 	      goal_pub.publish(goal_pose);
         */
       }
-      if(feedback->menu_entry_id == 9){ // Begin learning
+      if(feedback->menu_entry_id == 9){ // Start tracking
         std_msgs::Int32 learning_mode;
         learning_mode.data = 1;
 	      learning_mode_pub.publish(learning_mode);
       }
-      if(feedback->menu_entry_id == 10){ // End learning
+      if(feedback->menu_entry_id == 10){ // Stop tracking
         std_msgs::Int32 learning_mode;
         learning_mode.data = 2;
 	      learning_mode_pub.publish(learning_mode);
@@ -774,8 +774,8 @@ int main(int argc, char** argv)
   menu_handler.insert( "Torso Down", &processFeedback );
   menu_handler.insert( "IK to Start", &processFeedback );
   menu_handler.insert( "Plan to Goal", &processFeedback );
-  menu_handler.insert( "Begin Learning", &processFeedback );
-  menu_handler.insert( "End Learning", &processFeedback );
+  menu_handler.insert( "Start tracking", &processFeedback );
+  menu_handler.insert( "Stop tracking", &processFeedback );
   
   //menu_handler.insert( "Second Entry", &processFeedback );
   //interactive_markers::MenuHandler::EntryHandle sub_menu_handle = menu_handler.insert( "Submenu" );
