@@ -1,8 +1,0 @@
-IMPORTANT
-Setting start state after goal state results in repeated state id (0)
-Edge map initialization results in possible memory leak
-Goal state identical to start state. Changed points should be empty
-
-
-No ground connection in model
-Edges in model are bidirectional
