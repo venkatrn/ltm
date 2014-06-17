@@ -33,7 +33,8 @@ rosbuild_add_library(${PROJECT_NAME}
                     src/d_model.cpp
                     src/d_model_utils.cpp
                     src/d_model_learner.cpp
-                    src/d_model_planner.cpp)
+                    src/d_model_planner.cpp
+                    src/ltm_viz.cpp)
 #target_link_libraries(${PROJECT_NAME} another_library)
 #rosbuild_add_boost_directories()
 #rosbuild_link_boost(${PROJECT_NAME} thread)

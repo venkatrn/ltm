@@ -103,7 +103,7 @@ void DModel::InitFromFile(const char* dmodel_file, double shift_x, double shift_
   for (int ii = 0; ii < num_points; ++ii)
   {
     if (fscanf(f_dmodel, "%d %f %f %f %f %f %f %f\n", &idx1, &x, &y, &z,
-        &o_x, &o_y, &o_z, &o_w) != 8) 
+          &o_x, &o_y, &o_z, &o_w) != 8) 
     {
       ROS_ERROR("Error reading points d-model file\n");
       return;
@@ -200,11 +200,11 @@ void DModel::AddEdge(Edge e, EdgeParams e_params)
     adj_list_.resize(points_.poses.size());
     //TODO: This should not be needed at all
     /*
-    if (edge_map_ == nullptr)
-    {
-      edge_map_ = new unordered_map<Edge, EdgeParams, pair_hash>;
-    }
-    */
+       if (edge_map_ == nullptr)
+       {
+       edge_map_ = new unordered_map<Edge, EdgeParams, pair_hash>;
+       }
+       */
   }
   // TODO: Do this in a smarter way?
   if (find(adj_list_[e.first].begin(), adj_list_[e.first].end(), e.second) == adj_list_[e.first].end())
@@ -222,12 +222,12 @@ void DModel::AddEdge(Edge e, EdgeParams e_params)
     (*edge_map_)[e] = e_params;
   }
   /*
-  else if (e_params.joint != RIGID)
-    {
-      (*edge_map_)[e] = e_params;
-      (*edge_map_)[make_pair(e.second, e.first)] = e_params;
-    }
-  */
+     else if (e_params.joint != RIGID)
+     {
+     (*edge_map_)[e] = e_params;
+     (*edge_map_)[make_pair(e.second, e.first)] = e_params;
+     }
+     */
 
   return;
 }
@@ -241,27 +241,27 @@ void DModel::AddPoint(geometry_msgs::Pose p)
 void DModel::AddGraspPoint(geometry_msgs::Pose p)
 {
   // This is a special case where a point can be added after the model is learnt.
-    // Find the closest point
-    double min_dist = 100000;
-    int closest_p_idx = 1;
-    for (size_t ii = 0; ii < points_.poses.size(); ++ii)
-    {
+  // Find the closest point
+  double min_dist = 100000;
+  int closest_p_idx = 1;
+  for (size_t ii = 0; ii < points_.poses.size(); ++ii)
+  {
     double distance = Dist(p.position, points_.poses[ii].position);
-      if (distance < min_dist)
-      {
-        min_dist = distance;
-        closest_p_idx = ii;
-      }
+    if (distance < min_dist)
+    {
+      min_dist = distance;
+      closest_p_idx = ii;
     }
-    int num_points = int(points_.poses.size());
-    adj_list_.resize(num_points + 1);
-    Edge e = make_pair(num_points, closest_p_idx);
-    EdgeParams e_params(RIGID, tf::Vector3(0.0, 0.0, 0.0), 1.0);
-    AddPoint(p);
-    AddEdge(e, e_params);
-    AddGraspIdx(num_points);
-    TFCallback(points_);
-    return;
+  }
+  int num_points = int(points_.poses.size());
+  adj_list_.resize(num_points + 1);
+  Edge e = make_pair(num_points, closest_p_idx);
+  EdgeParams e_params(RIGID, tf::Vector3(0.0, 0.0, 0.0), 1.0);
+  AddPoint(p);
+  AddEdge(e, e_params);
+  AddGraspIdx(num_points);
+  TFCallback(points_);
+  return;
 }
 
 void DModel::TFTimedCallback(const ros::TimerEvent& event)
@@ -332,7 +332,7 @@ void DModel::TFCallback(geometry_msgs::PoseArray dmodel_points)
   {
     // Skip edges involving grasp point
     if (find(grasp_idxs_.begin(), grasp_idxs_.end(), it->first.first) != grasp_idxs_.end()
-    || find(grasp_idxs_.begin(), grasp_idxs_.end(), it->first.second) != grasp_idxs_.end())
+        || find(grasp_idxs_.begin(), grasp_idxs_.end(), it->first.second) != grasp_idxs_.end())
     {
       continue;
     }
@@ -356,10 +356,10 @@ void DModel::ApplyForce(int p_idx, tf::Vector3 force, double del_t)
   tf::Vector3 normal;
   ExtractIndices(p_idx, &component_idxs, &sep_idxs, &joint_type, &normal);
   /*
-  printf("Rigid component has %d points. Joint type is %d and param vector is %0.2f %0.2f %0.2f\n",
-      (int)component_idxs.size(), static_cast<int>(joint_type), normal.x(), 
-      normal.y(), normal.z());
-      */
+     printf("Rigid component has %d points. Joint type is %d and param vector is %0.2f %0.2f %0.2f\n",
+     (int)component_idxs.size(), static_cast<int>(joint_type), normal.x(), 
+     normal.y(), normal.z());
+     */
 
   int closest_p_idx = -1;
   if (sep_idxs.size() != 0) 
@@ -510,15 +510,15 @@ void DModel::ExtractIndices(int p_idx, vector<int>* component_idxs, vector<int>*
       EdgeParams e_params;
       // TODO: This needs to be double checked
       /*
-      if (edge_map_->find(make_pair(idx, adj_points[ii])) != edge_map_->end())
-      {
-        e_params = edge_map_->at(make_pair(idx, adj_points[ii]));
-      }
-      else
-      {
-        e_params = edge_map_->at(make_pair(adj_points[ii], idx));
-      }
-      */
+         if (edge_map_->find(make_pair(idx, adj_points[ii])) != edge_map_->end())
+         {
+         e_params = edge_map_->at(make_pair(idx, adj_points[ii]));
+         }
+         else
+         {
+         e_params = edge_map_->at(make_pair(adj_points[ii], idx));
+         }
+         */
       if (edge_map_->find(make_pair(adj_points[ii], idx)) != edge_map_->end())
       {
         e_params = edge_map_->at(make_pair(adj_points[ii], idx));
@@ -578,26 +578,26 @@ void DModel::GetNextState(const geometry_msgs::PoseArray& in_points, int p_idx, 
   ExtractIndices(p_idx, &component_idxs, &sep_idxs, &joint_type, &normal);
 
   /*
-  printf("Rigid component has %d points. Joint type is %d and param vector is %0.2f %0.2f %0.2f\n",
-      (int)component_idxs.size(), static_cast<int>(joint_type), normal.x(), 
-      normal.y(), normal.z());
-      */
+     printf("Rigid component has %d points. Joint type is %d and param vector is %0.2f %0.2f %0.2f\n",
+     (int)component_idxs.size(), static_cast<int>(joint_type), normal.x(), 
+     normal.y(), normal.z());
+     */
 
   // DEBUG
   /*
-  printf("Cluster indices:\n");
-  for (size_t ii = 0; ii < component_idxs.size(); ++ii)
-  {
-    printf("%d ", component_idxs[ii]);
-  }
-  printf("\n");
-  printf("Sep indices:\n");
-  for (size_t ii = 0; ii < sep_idxs.size(); ++ii)
-  {
-    printf("%d ", sep_idxs[ii]);
-  }
-  printf("\n");
-  */
+     printf("Cluster indices:\n");
+     for (size_t ii = 0; ii < component_idxs.size(); ++ii)
+     {
+     printf("%d ", component_idxs[ii]);
+     }
+     printf("\n");
+     printf("Sep indices:\n");
+     for (size_t ii = 0; ii < sep_idxs.size(); ++ii)
+     {
+     printf("%d ", sep_idxs[ii]);
+     }
+     printf("\n");
+     */
 
   int closest_p_idx = -1;
   if (sep_idxs.size() != 0) 
@@ -691,15 +691,15 @@ void DModel::GetNextState(const geometry_msgs::PoseArray& in_points, int p_idx, 
     tf::Vector3 torque = Cross(arm, projected_vector);
     double torque_norm = sqrt(Sqr(torque.x()) + Sqr(torque.y()) + Sqr(torque.z()));
     double theta = 0.5*Sqr(del_t)*torque_norm/inertia;
-    
+
     /*
-    printf("Arm: %f %f %f\n", arm.x(), arm.y(), arm.z());
-    printf("Normal: %f %f %f\n", normal.x(), normal.y(), normal.z());
-    printf("Tangent: %f %f %f\n", tangent.x(), tangent.y(), tangent.z());
-    printf("Projected vector: %f %f %f\n", projected_vector.x(), projected_vector.y(), projected_vector.z());
-    printf("Torque: %f %f %f\n", torque.x(), torque.y(), torque.z());
-    printf("Theta: %f\n", theta);
-    */
+       printf("Arm: %f %f %f\n", arm.x(), arm.y(), arm.z());
+       printf("Normal: %f %f %f\n", normal.x(), normal.y(), normal.z());
+       printf("Tangent: %f %f %f\n", tangent.x(), tangent.y(), tangent.z());
+       printf("Projected vector: %f %f %f\n", projected_vector.x(), projected_vector.y(), projected_vector.z());
+       printf("Torque: %f %f %f\n", torque.x(), torque.y(), torque.z());
+       printf("Theta: %f\n", theta);
+       */
 
     tf::Quaternion quat;
     // Return
@@ -761,13 +761,13 @@ void DModel::GetNextState(const geometry_msgs::PoseArray& in_points, int p_idx, 
     tf::Vector3 torque = Cross(arm, tf::Vector3(transformed_force.x(), transformed_force.y(), transformed_force.z()));
     tf::Vector3 omega = 0.5 * Sqr(del_t) * torque;
     double theta = sqrt(Sqr(omega.x()) + Sqr(omega.y()) + Sqr(omega.z()));
-    
+
     /*
-    printf("Arm: %f %f %f\n", arm.x(), arm.y(), arm.z());
-    printf("Normal: %f %f %f\n", normal.x(), normal.y(), normal.z());
-    printf("Torque: %f %f %f\n", torque.x(), torque.y(), torque.z());
-    printf("Theta: %f\n", theta);
-    */
+       printf("Arm: %f %f %f\n", arm.x(), arm.y(), arm.z());
+       printf("Normal: %f %f %f\n", normal.x(), normal.y(), normal.z());
+       printf("Torque: %f %f %f\n", torque.x(), torque.y(), torque.z());
+       printf("Theta: %f\n", theta);
+       */
 
     tf::Quaternion quat;
     // Return
@@ -1015,81 +1015,81 @@ void DModel::GetSuccs(int source_state_id, vector<int>* succs, vector<int>* edge
 }
 
 /*
-void DModel::GetSuccs(int source_state_id, vector<int>* succs, vector<int>* edge_ids, vector<double>* costs)
+   void DModel::GetSuccs(int source_state_id, vector<int>* succs, vector<int>* edge_ids, vector<double>* costs)
+   {
+   succs->clear();
+   edge_ids->clear();
+   costs->clear();
+
+// Goal state should be absorbing.
+if (IsGoalState(source_state_id))
 {
-  succs->clear();
-  edge_ids->clear();
-  costs->clear();
+return;
+}
 
-  // Goal state should be absorbing.
-  if (IsGoalState(source_state_id))
-  {
-    return;
-  }
+if (visualize_expansions_)
+{
+VisualizeState(source_state_id);
+usleep(1000);
+}
 
-  if (visualize_expansions_)
-  {
-    VisualizeState(source_state_id);
-    usleep(1000);
-  }
+State_t source_state = StateIDToState(source_state_id);
 
-  State_t source_state = StateIDToState(source_state_id);
+for (size_t kk = 0; kk < grasp_idxs_.size(); ++kk)
+{
+for (size_t jj = 0; jj < force_primitives_.size(); ++jj) {
+// Construct points in the state
+geometry_msgs::PoseArray in_points;
+for (size_t ii = 0; ii < points_.poses.size(); ++ii)
+{
+// If point has changed, then use the coordinates from state.
+auto it = find(source_state.changed_inds.begin(),
+source_state.changed_inds.end(),
+ii);
+if ( it != source_state.changed_inds.end())
+{
+int offset = distance(source_state.changed_inds.begin(), it);
+in_points.poses.push_back(source_state.changed_points.poses[offset]);
+}
+else
+{
+in_points.poses.push_back(points_.poses[ii]);
+}
+}
+geometry_msgs::PoseArray out_points;
+tf::Vector3 force = force_primitives_[jj];
+GetNextState(in_points, grasp_idxs_[kk], force, env_cfg_.sim_time_step, &out_points);
 
-  for (size_t kk = 0; kk < grasp_idxs_.size(); ++kk)
-  {
-    for (size_t jj = 0; jj < force_primitives_.size(); ++jj) {
-      // Construct points in the state
-      geometry_msgs::PoseArray in_points;
-      for (size_t ii = 0; ii < points_.poses.size(); ++ii)
-      {
-        // If point has changed, then use the coordinates from state.
-        auto it = find(source_state.changed_inds.begin(),
-            source_state.changed_inds.end(),
-            ii);
-        if ( it != source_state.changed_inds.end())
-        {
-          int offset = distance(source_state.changed_inds.begin(), it);
-          in_points.poses.push_back(source_state.changed_points.poses[offset]);
-        }
-        else
-        {
-          in_points.poses.push_back(points_.poses[ii]);
-        }
-      }
-      geometry_msgs::PoseArray out_points;
-      tf::Vector3 force = force_primitives_[jj];
-      GetNextState(in_points, grasp_idxs_[kk], force, env_cfg_.sim_time_step, &out_points);
+// Determine points that have changed and generate succ state accordingly.
+State_t succ_state;
+for (size_t ii = 0; ii < points_.poses.size(); ++ii)
+{
+if (fabs(points_.poses[ii].position.x-out_points.poses[ii].position.x) >= kFPTolerance ||
+fabs(points_.poses[ii].position.y-out_points.poses[ii].position.y) >= kFPTolerance ||
+fabs(points_.poses[ii].position.z-out_points.poses[ii].position.z) >= kFPTolerance) 
+{
+succ_state.changed_points.poses.push_back(out_points.poses[ii]); 
+succ_state.changed_inds.push_back(ii); 
+}
+}
 
-      // Determine points that have changed and generate succ state accordingly.
-      State_t succ_state;
-      for (size_t ii = 0; ii < points_.poses.size(); ++ii)
-      {
-        if (fabs(points_.poses[ii].position.x-out_points.poses[ii].position.x) >= kFPTolerance ||
-            fabs(points_.poses[ii].position.y-out_points.poses[ii].position.y) >= kFPTolerance ||
-            fabs(points_.poses[ii].position.z-out_points.poses[ii].position.z) >= kFPTolerance) 
-        {
-          succ_state.changed_points.poses.push_back(out_points.poses[ii]); 
-          succ_state.changed_inds.push_back(ii); 
-        }
-      }
+// DEBUG
+// printf("Number of changed points: %d\n", int(succ_state.changed_inds.size()));
 
-      // DEBUG
-      // printf("Number of changed points: %d\n", int(succ_state.changed_inds.size()));
+int succ_id = StateToStateID(succ_state);
 
-      int succ_id = StateToStateID(succ_state);
-
-      succs->push_back(succ_id);
-      edge_ids->push_back(FPrimToFPrimID(kk, jj));
-      // TODO(venkat): Compute costs
-      // costs->push_back(1);
-      // costs->push_back(int(kCostMultiplier * Norm(force)));
-      // TODO(venkat): Compute distance traveled by end-effector, so that
-      // we can compute power = force x velocity
-      // Cost is time
-      costs->push_back(int(kCostMultiplier * env_cfg_.sim_time_step));
-    }
-  }
-  return;
+succs->push_back(succ_id);
+edge_ids->push_back(FPrimToFPrimID(kk, jj));
+// TODO(venkat): Compute costs
+// costs->push_back(1);
+// costs->push_back(int(kCostMultiplier * Norm(force)));
+// TODO(venkat): Compute distance traveled by end-effector, so that
+// we can compute power = force x velocity
+// Cost is time
+costs->push_back(int(kCostMultiplier * env_cfg_.sim_time_step));
+}
+}
+return;
 }
 */
 
@@ -1150,7 +1150,7 @@ double DModel::GetGoalHeuristic(int state_id)
       return 0;
     }
     total_dist += Dist(grasp_pose.position, env_cfg_.goal_grasp_poses.poses[ii].position);
-    
+
     // Distance for current location of end-effector alone
     if (grasp_idxs_[ii] == s.grasp_idx)
     {
@@ -1220,12 +1220,12 @@ bool DModel::ConvertForcePrimIDsToForcePrims(const vector<int>& fprim_ids, vecto
   {
     //TODO: Check this
     /*
-    if (fprim_ids[ii] >= int(force_primitives_.size()))
-    {
-      printf("DModel: Invalid force primitive ID while reconstructing forces\n");
-      return false;
-    }
-    */
+       if (fprim_ids[ii] >= int(force_primitives_.size()))
+       {
+       printf("DModel: Invalid force primitive ID while reconstructing forces\n");
+       return false;
+       }
+       */
     int grasp_idx;
     int force_idx;
     FPrimIDToFPrim(fprim_ids[ii], &grasp_idx, &force_idx);
@@ -1258,7 +1258,7 @@ bool DModel::GetEndEffectorTrajFromStateIDs(const std::vector<int>& state_ids,
 
 
 void DModel::LearnDModelParameters(const vector<geometry_msgs::PoseArray>& observations,
-  const vector<Edge>& edges)
+    const vector<Edge>& edges)
 {
   if (int(points_.poses.size()) == 0)
   {
@@ -1311,48 +1311,48 @@ void DModel::LearnDModelParameters(const vector<geometry_msgs::PoseArray>& obser
     prismatic_vectors[ii].resize(num_edges);
     for (int jj = 0; jj < num_edges; ++jj) 
     {
-        axis_vectors[ii][jj] = Cross(local_vectors[ii][jj], local_vectors[ii + 1][jj]);
-        const double axis_vector_norm = Norm(axis_vectors[ii][jj]);
-        if (axis_vector_norm > 0.1)
-        {
-          axis_vectors[ii][jj] = axis_vectors[ii][jj] / axis_vector_norm;
-        }
-        else
-        {
-          axis_vectors[ii][jj] = 0*axis_vectors[ii][jj];
-        }
+      axis_vectors[ii][jj] = Cross(local_vectors[ii][jj], local_vectors[ii + 1][jj]);
+      const double axis_vector_norm = Norm(axis_vectors[ii][jj]);
+      if (axis_vector_norm > 0.1)
+      {
+        axis_vectors[ii][jj] = axis_vectors[ii][jj] / axis_vector_norm;
+      }
+      else
+      {
+        axis_vectors[ii][jj] = 0*axis_vectors[ii][jj];
+      }
 
-        prismatic_vectors[ii][jj] = dists[ii + 1][jj]*local_vectors[ii + 1][jj] - dists[ii][jj] * local_vectors[ii][jj];
-        //TODO: This is a hack to account for sign change. 
-        if (prismatic_vectors[ii][jj].z() < 0)
-        {
-          prismatic_vectors[ii][jj] = -prismatic_vectors[ii][jj];
-        }
+      prismatic_vectors[ii][jj] = dists[ii + 1][jj]*local_vectors[ii + 1][jj] - dists[ii][jj] * local_vectors[ii][jj];
+      //TODO: This is a hack to account for sign change. 
+      if (prismatic_vectors[ii][jj].z() < 0)
+      {
+        prismatic_vectors[ii][jj] = -prismatic_vectors[ii][jj];
+      }
 
-        //if (fabs(dists[ii+1][jj]-dists[ii][jj]) < 0.01)
-        if (fabs(dists[ii+1][jj]-dists[ii][jj]) < kFPTolerance)
-        {
-          prismatic_vectors[ii][jj] = tf::Vector3(0.0, 0.0, 0.0);
-        }
-        const double prismatic_vector_norm = Norm(prismatic_vectors[ii][jj]);
-        if (prismatic_vector_norm > kFPTolerance)
-        {
-          prismatic_vectors[ii][jj] = prismatic_vectors[ii][jj] / prismatic_vector_norm;
-        }
-        else
-        {
-          prismatic_vectors[ii][jj] = 0*prismatic_vectors[ii][jj];
-        }
+      //if (fabs(dists[ii+1][jj]-dists[ii][jj]) < 0.01)
+      if (fabs(dists[ii+1][jj]-dists[ii][jj]) < kFPTolerance)
+      {
+        prismatic_vectors[ii][jj] = tf::Vector3(0.0, 0.0, 0.0);
+      }
+      const double prismatic_vector_norm = Norm(prismatic_vectors[ii][jj]);
+      if (prismatic_vector_norm > kFPTolerance)
+      {
+        prismatic_vectors[ii][jj] = prismatic_vectors[ii][jj] / prismatic_vector_norm;
+      }
+      else
+      {
+        prismatic_vectors[ii][jj] = 0*prismatic_vectors[ii][jj];
+      }
     }
   }
 
-      // DEBUG
+  // DEBUG
   for (int jj = 0; jj < num_edges; ++jj)
   {
     for (int ii = 0; ii < num_obs - 1; ++ii)
     {
-//      printf("Axis vector: %d %d: %f %f %f\n", edges[jj].first, edges[jj].second, axis_vectors[ii][jj].x(),
-//          axis_vectors[ii][jj].y(), axis_vectors[ii][jj].z());
+      //      printf("Axis vector: %d %d: %f %f %f\n", edges[jj].first, edges[jj].second, axis_vectors[ii][jj].x(),
+      //          axis_vectors[ii][jj].y(), axis_vectors[ii][jj].z());
       ROS_DEBUG("Prismatic vector: %d %d: %f %f %f\n", edges[jj].first, edges[jj].second, prismatic_vectors[ii][jj].x(),
           prismatic_vectors[ii][jj].y(), prismatic_vectors[ii][jj].z());
       ROS_DEBUG("Local vector 1: %d %d: %f %f %f\n", edges[jj].first, edges[jj].second, local_vectors[ii][jj].x(),
@@ -1384,8 +1384,8 @@ void DModel::LearnDModelParameters(const vector<geometry_msgs::PoseArray>& obser
       constraint_means[ii] = constraint_means[ii] + local_vectors[jj][ii];
       if (fabs(dists[jj][ii] - dists[jj + 1][ii]) > 0.02)
       {
-      dist_means[ii] = dist_means[ii] + dists[jj][ii];
-      num_unique_dist_vals++;
+        dist_means[ii] = dist_means[ii] + dists[jj][ii];
+        num_unique_dist_vals++;
       }
       axis_means[ii] = axis_means[ii] + axis_vectors[jj][ii];   
       prismatic_means[ii] = prismatic_means[ii] + prismatic_vectors[jj][ii];
@@ -1450,82 +1450,82 @@ void DModel::LearnDModelParameters(const vector<geometry_msgs::PoseArray>& obser
     for (int jj = 0; jj < num_obs - 1; ++jj)
     {
       Eigen::Vector3d c_vec(local_vectors[jj][ii].x(),
-                            local_vectors[jj][ii].y(),
-                            local_vectors[jj][ii].z());
+          local_vectors[jj][ii].y(),
+          local_vectors[jj][ii].z());
       Eigen::Vector3d axis_vec(axis_vectors[jj][ii].x(),
-                            axis_vectors[jj][ii].y(),
-                            axis_vectors[jj][ii].z());
+          axis_vectors[jj][ii].y(),
+          axis_vectors[jj][ii].z());
       Eigen::Vector3d p_vec(prismatic_vectors[jj][ii].x(),
-                            prismatic_vectors[jj][ii].y(),
-                            prismatic_vectors[jj][ii].z());
+          prismatic_vectors[jj][ii].y(),
+          prismatic_vectors[jj][ii].z());
       Eigen::Vector3d c_mu(constraint_means[ii].x(),
-                           constraint_means[ii].y(),
-                           constraint_means[ii].z());
+          constraint_means[ii].y(),
+          constraint_means[ii].z());
       Eigen::Vector3d p_mu(prismatic_means[ii].x(),
-                           prismatic_means[ii].y(),
-                           prismatic_means[ii].z());
+          prismatic_means[ii].y(),
+          prismatic_means[ii].z());
       Eigen::Vector3d axis_mu(axis_means[ii].x(),
-                           axis_means[ii].y(),
-                           axis_means[ii].z());
+          axis_means[ii].y(),
+          axis_means[ii].z());
 
-       const double p_dist = NormalPDF(dists[jj][ii], dist_means[ii], kDistVar);
-       double p_c_vec = MultivariateNormalPDF(c_vec, c_mu, cvec_covariance);
-       double p_axis_vec;
-      
-       if (fabs(axis_means[ii].x()) < kFPTolerance &&
-           fabs(axis_means[ii].y()) < kFPTolerance &&
-           fabs(axis_means[ii].z()) < kFPTolerance)
-       {
-         //p_axis_vec = 1.0;
-         p_axis_vec = 0.5;
-       }
-       else if (fabs(axis_vectors[jj][ii].x()) < kFPTolerance &&
-           fabs(axis_vectors[jj][ii].y()) < kFPTolerance &&
-           fabs(axis_vectors[jj][ii].z()) < kFPTolerance)
-       {
-         p_axis_vec = 1.0;
-       }
-       else
-       {
-         //p_axis_vec = MultivariateNormalPDF(axis_mu, axis_mu, dir_covariance);
+      const double p_dist = NormalPDF(dists[jj][ii], dist_means[ii], kDistVar);
+      double p_c_vec = MultivariateNormalPDF(c_vec, c_mu, cvec_covariance);
+      double p_axis_vec;
+
+      if (fabs(axis_means[ii].x()) < kFPTolerance &&
+          fabs(axis_means[ii].y()) < kFPTolerance &&
+          fabs(axis_means[ii].z()) < kFPTolerance)
+      {
+        //p_axis_vec = 1.0;
+        p_axis_vec = 0.5;
+      }
+      else if (fabs(axis_vectors[jj][ii].x()) < kFPTolerance &&
+          fabs(axis_vectors[jj][ii].y()) < kFPTolerance &&
+          fabs(axis_vectors[jj][ii].z()) < kFPTolerance)
+      {
+        p_axis_vec = 1.0;
+      }
+      else
+      {
+        //p_axis_vec = MultivariateNormalPDF(axis_mu, axis_mu, dir_covariance);
         p_axis_vec = MultivariateNormalPDF(axis_vec, axis_mu, dir_covariance);
-       }
+      }
 
-       double p_prismatic_vec;
-      
-       if (fabs(prismatic_means[ii].x()) < kFPTolerance &&
-           fabs(prismatic_means[ii].y()) < kFPTolerance &&
-           fabs(prismatic_means[ii].z()) < kFPTolerance)
-       {
-         //p_prismatic_vec = 1.0;
-         p_prismatic_vec = 0.5;
-       }
-       else if (fabs(prismatic_vectors[jj][ii].x()) < kFPTolerance &&
-           fabs(prismatic_vectors[jj][ii].y()) < kFPTolerance &&
-           fabs(prismatic_vectors[jj][ii].z()) < kFPTolerance)
-       {
-         p_prismatic_vec = 1.0;
-       }
-       else
-       {
-         // Account for sign change in direction vector
-         p_prismatic_vec = MultivariateNormalPDF(p_vec, p_mu, cvec_covariance);
-       }
+      double p_prismatic_vec;
 
-       ROS_DEBUG("%d %d: %f %f %f %f\n", p_dist, p_c_vec, p_prismatic_vec, p_axis_vec, edges[ii].first, edges[ii].second);
-       //p_rigid[ii] *= p_dist * p_c_vec;
-       if (fabs(p_prismatic_vec - 1.0) < kFPTolerance || fabs(p_axis_vec - 1.0) < kFPTolerance)
-       {
-         continue;
-       }
-       p_rigid[ii] *= p_c_vec;
-       p_prismatic[ii] *= p_prismatic_vec;
-       p_revolute[ii] *= p_axis_vec;
-       //p_revolute[ii] *= p_axis_vec * p_dist;
+      if (fabs(prismatic_means[ii].x()) < kFPTolerance &&
+          fabs(prismatic_means[ii].y()) < kFPTolerance &&
+          fabs(prismatic_means[ii].z()) < kFPTolerance)
+      {
+        //p_prismatic_vec = 1.0;
+        p_prismatic_vec = 0.5;
+      }
+      else if (fabs(prismatic_vectors[jj][ii].x()) < kFPTolerance &&
+          fabs(prismatic_vectors[jj][ii].y()) < kFPTolerance &&
+          fabs(prismatic_vectors[jj][ii].z()) < kFPTolerance)
+      {
+        p_prismatic_vec = 1.0;
+      }
+      else
+      {
+        // Account for sign change in direction vector
+        p_prismatic_vec = MultivariateNormalPDF(p_vec, p_mu, cvec_covariance);
+      }
+
+      ROS_DEBUG("%d %d: %f %f %f %f\n", p_dist, p_c_vec, p_prismatic_vec, p_axis_vec, edges[ii].first, edges[ii].second);
+      //p_rigid[ii] *= p_dist * p_c_vec;
+      if (fabs(p_prismatic_vec - 1.0) < kFPTolerance || fabs(p_axis_vec - 1.0) < kFPTolerance)
+      {
+        continue;
+      }
+      p_rigid[ii] *= p_c_vec;
+      p_prismatic[ii] *= p_prismatic_vec;
+      p_revolute[ii] *= p_axis_vec;
+      //p_revolute[ii] *= p_axis_vec * p_dist;
     }
-       p_rigid[ii] *=  rigid_prior;
-       p_prismatic[ii] *= prismatic_prior;
-       p_revolute[ii] *= revolute_prior;
+    p_rigid[ii] *=  rigid_prior;
+    p_prismatic[ii] *= prismatic_prior;
+    p_revolute[ii] *= revolute_prior;
 
     // Normalize the probabilties
     const double normalizer = p_rigid[ii] + p_prismatic[ii] + p_revolute[ii];
@@ -1540,39 +1540,39 @@ void DModel::LearnDModelParameters(const vector<geometry_msgs::PoseArray>& obser
 
   // Decision tree based on variance
   /*
-  const double constraint_thresh = 0.05;
-  const double dist_thresh = 0.15; //0.05
-  for (int ii = 0; ii < num_edges; ++ii)
+     const double constraint_thresh = 0.05;
+     const double dist_thresh = 0.15; //0.05
+     for (int ii = 0; ii < num_edges; ++ii)
+     {
+  // double cov_det = pow(constraint_cov[ii].determinant(), 0.33);
+  double cov_det = constraint_cov[ii].trace();
+  if (cov_det < constraint_thresh && dist_cov[ii] < dist_thresh)
   {
-    // double cov_det = pow(constraint_cov[ii].determinant(), 0.33);
-    double cov_det = constraint_cov[ii].trace();
-    if (cov_det < constraint_thresh && dist_cov[ii] < dist_thresh)
-    {
-      p_rigid[ii] = 1.0;
-      p_prismatic[ii] = 0.0;
-      p_revolute[ii] = 0.0;
-    }
-    else if (cov_det < constraint_thresh)
-    {
-      p_rigid[ii] = 0.0;
-      p_prismatic[ii] = 1.0;
-      p_revolute[ii] = 0.0;
-    }
-    else if (dist_cov[ii] < dist_thresh)
-    {
-      p_rigid[ii] = 0.0;
-      p_prismatic[ii] = 0.0;
-      p_revolute[ii] = 1.0;
-    }
-    else
-    {
-      p_rigid[ii] = 0.33;
-      p_prismatic[ii] = 0.33;
-      p_revolute[ii] = 0.33;
-    }
+  p_rigid[ii] = 1.0;
+  p_prismatic[ii] = 0.0;
+  p_revolute[ii] = 0.0;
+  }
+  else if (cov_det < constraint_thresh)
+  {
+  p_rigid[ii] = 0.0;
+  p_prismatic[ii] = 1.0;
+  p_revolute[ii] = 0.0;
+  }
+  else if (dist_cov[ii] < dist_thresh)
+  {
+  p_rigid[ii] = 0.0;
+  p_prismatic[ii] = 0.0;
+  p_revolute[ii] = 1.0;
+  }
+  else
+  {
+  p_rigid[ii] = 0.33;
+  p_prismatic[ii] = 0.33;
+  p_revolute[ii] = 0.33;
+  }
   }
   */
-  
+
   // Display probabilities
   ROS_DEBUG("DModel: Learnt probabilities\n");
   for (int ii = 0; ii < num_edges; ++ii)
@@ -1580,7 +1580,7 @@ void DModel::LearnDModelParameters(const vector<geometry_msgs::PoseArray>& obser
     ROS_DEBUG("Edge (%d %d): %f %f %f\n", edges[ii].first, edges[ii].second, 
         p_rigid[ii], p_prismatic[ii], p_revolute[ii]);
   }
-  
+
   // Initialize edges
   for (int ii = 0; ii < num_edges; ++ii)
   {
@@ -1597,8 +1597,8 @@ void DModel::LearnDModelParameters(const vector<geometry_msgs::PoseArray>& obser
       max_p = p_revolute[ii];
       jt = REVOLUTE;
     }
-    
-     // Add edge
+
+    // Add edge
     EdgeParams e_params;
     e_params.joint = jt;
     // Rad does not matter for now
@@ -1625,7 +1625,7 @@ void DModel::LearnDModelParameters(const vector<geometry_msgs::PoseArray>& obser
 }
 
 void DModel::LearnDModelParametersExperimental(const vector<geometry_msgs::PoseArray>& observations,
-  const vector<Edge>& edges)
+    const vector<Edge>& edges)
 {
   if (int(points_.poses.size()) == 0)
   {
@@ -1678,48 +1678,48 @@ void DModel::LearnDModelParametersExperimental(const vector<geometry_msgs::PoseA
     prismatic_vectors[ii].resize(num_edges);
     for (int jj = 0; jj < num_edges; ++jj) 
     {
-        axis_vectors[ii][jj] = Cross(local_vectors[ii][jj], local_vectors[ii + 1][jj]);
-        const double axis_vector_norm = Norm(axis_vectors[ii][jj]);
-        if (axis_vector_norm > 0.1)
-        {
-          axis_vectors[ii][jj] = axis_vectors[ii][jj] / axis_vector_norm;
-        }
-        else
-        {
-          axis_vectors[ii][jj] = 0*axis_vectors[ii][jj];
-        }
+      axis_vectors[ii][jj] = Cross(local_vectors[ii][jj], local_vectors[ii + 1][jj]);
+      const double axis_vector_norm = Norm(axis_vectors[ii][jj]);
+      if (axis_vector_norm > 0.1)
+      {
+        axis_vectors[ii][jj] = axis_vectors[ii][jj] / axis_vector_norm;
+      }
+      else
+      {
+        axis_vectors[ii][jj] = 0*axis_vectors[ii][jj];
+      }
 
-        prismatic_vectors[ii][jj] = dists[ii + 1][jj]*local_vectors[ii + 1][jj] - dists[ii][jj] * local_vectors[ii][jj];
-        //TODO: This is a hack to account for sign change. 
-        if (prismatic_vectors[ii][jj].z() < 0)
-        {
-          prismatic_vectors[ii][jj] = -prismatic_vectors[ii][jj];
-        }
+      prismatic_vectors[ii][jj] = dists[ii + 1][jj]*local_vectors[ii + 1][jj] - dists[ii][jj] * local_vectors[ii][jj];
+      //TODO: This is a hack to account for sign change. 
+      if (prismatic_vectors[ii][jj].z() < 0)
+      {
+        prismatic_vectors[ii][jj] = -prismatic_vectors[ii][jj];
+      }
 
-        //if (fabs(dists[ii+1][jj]-dists[ii][jj]) < 0.01)
-        if (fabs(dists[ii+1][jj]-dists[ii][jj]) < kFPTolerance)
-        {
-          prismatic_vectors[ii][jj] = tf::Vector3(0.0, 0.0, 0.0);
-        }
-        const double prismatic_vector_norm = Norm(prismatic_vectors[ii][jj]);
-        if (prismatic_vector_norm > kFPTolerance)
-        {
-          prismatic_vectors[ii][jj] = prismatic_vectors[ii][jj] / prismatic_vector_norm;
-        }
-        else
-        {
-          prismatic_vectors[ii][jj] = 0*prismatic_vectors[ii][jj];
-        }
+      //if (fabs(dists[ii+1][jj]-dists[ii][jj]) < 0.01)
+      if (fabs(dists[ii+1][jj]-dists[ii][jj]) < kFPTolerance)
+      {
+        prismatic_vectors[ii][jj] = tf::Vector3(0.0, 0.0, 0.0);
+      }
+      const double prismatic_vector_norm = Norm(prismatic_vectors[ii][jj]);
+      if (prismatic_vector_norm > kFPTolerance)
+      {
+        prismatic_vectors[ii][jj] = prismatic_vectors[ii][jj] / prismatic_vector_norm;
+      }
+      else
+      {
+        prismatic_vectors[ii][jj] = 0*prismatic_vectors[ii][jj];
+      }
     }
   }
 
-      // DEBUG
+  // DEBUG
   for (int jj = 0; jj < num_edges; ++jj)
   {
     for (int ii = 0; ii < num_obs - 1; ++ii)
     {
-//      ROS_DEBUG("Axis vector: %d %d: %f %f %f\n", edges[jj].first, edges[jj].second, axis_vectors[ii][jj].x(),
-//          axis_vectors[ii][jj].y(), axis_vectors[ii][jj].z());
+      //      ROS_DEBUG("Axis vector: %d %d: %f %f %f\n", edges[jj].first, edges[jj].second, axis_vectors[ii][jj].x(),
+      //          axis_vectors[ii][jj].y(), axis_vectors[ii][jj].z());
       ROS_DEBUG("Prismatic vector: %d %d: %f %f %f\n", edges[jj].first, edges[jj].second, prismatic_vectors[ii][jj].x(),
           prismatic_vectors[ii][jj].y(), prismatic_vectors[ii][jj].z());
       ROS_DEBUG("Local vector 1: %d %d: %f %f %f\n", edges[jj].first, edges[jj].second, local_vectors[ii][jj].x(),
@@ -1751,8 +1751,8 @@ void DModel::LearnDModelParametersExperimental(const vector<geometry_msgs::PoseA
       constraint_means[ii] = constraint_means[ii] + local_vectors[jj][ii];
       if (fabs(dists[jj][ii] - dists[jj + 1][ii]) > 0.02)
       {
-      dist_means[ii] = dist_means[ii] + dists[jj][ii];
-      num_unique_dist_vals++;
+        dist_means[ii] = dist_means[ii] + dists[jj][ii];
+        num_unique_dist_vals++;
       }
       axis_means[ii] = axis_means[ii] + axis_vectors[jj][ii];   
       prismatic_means[ii] = prismatic_means[ii] + prismatic_vectors[jj][ii];
@@ -1817,82 +1817,82 @@ void DModel::LearnDModelParametersExperimental(const vector<geometry_msgs::PoseA
     for (int jj = 0; jj < num_obs - 1; ++jj)
     {
       Eigen::Vector3d c_vec(local_vectors[jj][ii].x(),
-                            local_vectors[jj][ii].y(),
-                            local_vectors[jj][ii].z());
+          local_vectors[jj][ii].y(),
+          local_vectors[jj][ii].z());
       Eigen::Vector3d axis_vec(axis_vectors[jj][ii].x(),
-                            axis_vectors[jj][ii].y(),
-                            axis_vectors[jj][ii].z());
+          axis_vectors[jj][ii].y(),
+          axis_vectors[jj][ii].z());
       Eigen::Vector3d p_vec(prismatic_vectors[jj][ii].x(),
-                            prismatic_vectors[jj][ii].y(),
-                            prismatic_vectors[jj][ii].z());
+          prismatic_vectors[jj][ii].y(),
+          prismatic_vectors[jj][ii].z());
       Eigen::Vector3d c_mu(constraint_means[ii].x(),
-                           constraint_means[ii].y(),
-                           constraint_means[ii].z());
+          constraint_means[ii].y(),
+          constraint_means[ii].z());
       Eigen::Vector3d p_mu(prismatic_means[ii].x(),
-                           prismatic_means[ii].y(),
-                           prismatic_means[ii].z());
+          prismatic_means[ii].y(),
+          prismatic_means[ii].z());
       Eigen::Vector3d axis_mu(axis_means[ii].x(),
-                           axis_means[ii].y(),
-                           axis_means[ii].z());
+          axis_means[ii].y(),
+          axis_means[ii].z());
 
-       const double p_dist = NormalPDF(dists[jj][ii], dist_means[ii], kDistVar);
-       double p_c_vec = MultivariateNormalPDF(c_vec, c_mu, cvec_covariance);
-       double p_axis_vec;
-      
-       if (fabs(axis_means[ii].x()) < kFPTolerance &&
-           fabs(axis_means[ii].y()) < kFPTolerance &&
-           fabs(axis_means[ii].z()) < kFPTolerance)
-       {
-         //p_axis_vec = 1.0;
-         p_axis_vec = 0.5;
-       }
-       else if (fabs(axis_vectors[jj][ii].x()) < kFPTolerance &&
-           fabs(axis_vectors[jj][ii].y()) < kFPTolerance &&
-           fabs(axis_vectors[jj][ii].z()) < kFPTolerance)
-       {
-         p_axis_vec = 1.0;
-       }
-       else
-       {
-         //p_axis_vec = MultivariateNormalPDF(axis_mu, axis_mu, dir_covariance);
+      const double p_dist = NormalPDF(dists[jj][ii], dist_means[ii], kDistVar);
+      double p_c_vec = MultivariateNormalPDF(c_vec, c_mu, cvec_covariance);
+      double p_axis_vec;
+
+      if (fabs(axis_means[ii].x()) < kFPTolerance &&
+          fabs(axis_means[ii].y()) < kFPTolerance &&
+          fabs(axis_means[ii].z()) < kFPTolerance)
+      {
+        //p_axis_vec = 1.0;
+        p_axis_vec = 0.5;
+      }
+      else if (fabs(axis_vectors[jj][ii].x()) < kFPTolerance &&
+          fabs(axis_vectors[jj][ii].y()) < kFPTolerance &&
+          fabs(axis_vectors[jj][ii].z()) < kFPTolerance)
+      {
+        p_axis_vec = 1.0;
+      }
+      else
+      {
+        //p_axis_vec = MultivariateNormalPDF(axis_mu, axis_mu, dir_covariance);
         p_axis_vec = MultivariateNormalPDF(axis_vec, axis_mu, dir_covariance);
-       }
+      }
 
-       double p_prismatic_vec;
-      
-       if (fabs(prismatic_means[ii].x()) < kFPTolerance &&
-           fabs(prismatic_means[ii].y()) < kFPTolerance &&
-           fabs(prismatic_means[ii].z()) < kFPTolerance)
-       {
-         //p_prismatic_vec = 1.0;
-         p_prismatic_vec = 0.5;
-       }
-       else if (fabs(prismatic_vectors[jj][ii].x()) < kFPTolerance &&
-           fabs(prismatic_vectors[jj][ii].y()) < kFPTolerance &&
-           fabs(prismatic_vectors[jj][ii].z()) < kFPTolerance)
-       {
-         p_prismatic_vec = 1.0;
-       }
-       else
-       {
-         // Account for sign change in direction vector
-         p_prismatic_vec = MultivariateNormalPDF(p_vec, p_mu, cvec_covariance);
-       }
+      double p_prismatic_vec;
 
-       ROS_DEBUG("%d %d: %f %f %f %f\n", p_dist, p_c_vec, p_prismatic_vec, p_axis_vec, edges[ii].first, edges[ii].second);
-       //p_rigid[ii] *= p_dist * p_c_vec;
-       if (fabs(p_prismatic_vec - 1.0) < kFPTolerance || fabs(p_axis_vec - 1.0) < kFPTolerance)
-       {
-         continue;
-       }
-       p_rigid[ii] *= p_c_vec;
-       p_prismatic[ii] *= p_prismatic_vec;
-       p_revolute[ii] *= p_axis_vec;
-       //p_revolute[ii] *= p_axis_vec * p_dist;
+      if (fabs(prismatic_means[ii].x()) < kFPTolerance &&
+          fabs(prismatic_means[ii].y()) < kFPTolerance &&
+          fabs(prismatic_means[ii].z()) < kFPTolerance)
+      {
+        //p_prismatic_vec = 1.0;
+        p_prismatic_vec = 0.5;
+      }
+      else if (fabs(prismatic_vectors[jj][ii].x()) < kFPTolerance &&
+          fabs(prismatic_vectors[jj][ii].y()) < kFPTolerance &&
+          fabs(prismatic_vectors[jj][ii].z()) < kFPTolerance)
+      {
+        p_prismatic_vec = 1.0;
+      }
+      else
+      {
+        // Account for sign change in direction vector
+        p_prismatic_vec = MultivariateNormalPDF(p_vec, p_mu, cvec_covariance);
+      }
+
+      ROS_DEBUG("%d %d: %f %f %f %f\n", p_dist, p_c_vec, p_prismatic_vec, p_axis_vec, edges[ii].first, edges[ii].second);
+      //p_rigid[ii] *= p_dist * p_c_vec;
+      if (fabs(p_prismatic_vec - 1.0) < kFPTolerance || fabs(p_axis_vec - 1.0) < kFPTolerance)
+      {
+        continue;
+      }
+      p_rigid[ii] *= p_c_vec;
+      p_prismatic[ii] *= p_prismatic_vec;
+      p_revolute[ii] *= p_axis_vec;
+      //p_revolute[ii] *= p_axis_vec * p_dist;
     }
-       p_rigid[ii] *=  rigid_prior;
-       p_prismatic[ii] *= prismatic_prior;
-       p_revolute[ii] *= revolute_prior;
+    p_rigid[ii] *=  rigid_prior;
+    p_prismatic[ii] *= prismatic_prior;
+    p_revolute[ii] *= revolute_prior;
 
     // Normalize the probabilties
     const double normalizer = p_rigid[ii] + p_prismatic[ii] + p_revolute[ii];
@@ -1907,39 +1907,39 @@ void DModel::LearnDModelParametersExperimental(const vector<geometry_msgs::PoseA
 
   // Decision tree based on variance
   /*
-  const double constraint_thresh = 0.05;
-  const double dist_thresh = 0.15; //0.05
-  for (int ii = 0; ii < num_edges; ++ii)
+     const double constraint_thresh = 0.05;
+     const double dist_thresh = 0.15; //0.05
+     for (int ii = 0; ii < num_edges; ++ii)
+     {
+  // double cov_det = pow(constraint_cov[ii].determinant(), 0.33);
+  double cov_det = constraint_cov[ii].trace();
+  if (cov_det < constraint_thresh && dist_cov[ii] < dist_thresh)
   {
-    // double cov_det = pow(constraint_cov[ii].determinant(), 0.33);
-    double cov_det = constraint_cov[ii].trace();
-    if (cov_det < constraint_thresh && dist_cov[ii] < dist_thresh)
-    {
-      p_rigid[ii] = 1.0;
-      p_prismatic[ii] = 0.0;
-      p_revolute[ii] = 0.0;
-    }
-    else if (cov_det < constraint_thresh)
-    {
-      p_rigid[ii] = 0.0;
-      p_prismatic[ii] = 1.0;
-      p_revolute[ii] = 0.0;
-    }
-    else if (dist_cov[ii] < dist_thresh)
-    {
-      p_rigid[ii] = 0.0;
-      p_prismatic[ii] = 0.0;
-      p_revolute[ii] = 1.0;
-    }
-    else
-    {
-      p_rigid[ii] = 0.33;
-      p_prismatic[ii] = 0.33;
-      p_revolute[ii] = 0.33;
-    }
+  p_rigid[ii] = 1.0;
+  p_prismatic[ii] = 0.0;
+  p_revolute[ii] = 0.0;
+  }
+  else if (cov_det < constraint_thresh)
+  {
+  p_rigid[ii] = 0.0;
+  p_prismatic[ii] = 1.0;
+  p_revolute[ii] = 0.0;
+  }
+  else if (dist_cov[ii] < dist_thresh)
+  {
+  p_rigid[ii] = 0.0;
+  p_prismatic[ii] = 0.0;
+  p_revolute[ii] = 1.0;
+  }
+  else
+  {
+  p_rigid[ii] = 0.33;
+  p_prismatic[ii] = 0.33;
+  p_revolute[ii] = 0.33;
+  }
   }
   */
-  
+
   // Display probabilities
   ROS_DEBUG("DModel: Learnt probabilities\n");
   for (int ii = 0; ii < num_edges; ++ii)
@@ -1947,7 +1947,7 @@ void DModel::LearnDModelParametersExperimental(const vector<geometry_msgs::PoseA
     ROS_DEBUG("Edge (%d %d): %f %f %f\n", edges[ii].first, edges[ii].second, 
         p_rigid[ii], p_prismatic[ii], p_revolute[ii]);
   }
-  
+
   // Initialize edges
   for (int ii = 0; ii < num_edges; ++ii)
   {
@@ -1964,8 +1964,8 @@ void DModel::LearnDModelParametersExperimental(const vector<geometry_msgs::PoseA
       max_p = p_revolute[ii];
       jt = REVOLUTE;
     }
-    
-     // Add edge
+
+    // Add edge
     EdgeParams e_params;
     e_params.joint = jt;
     // Rad does not matter for now
