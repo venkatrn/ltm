@@ -11,9 +11,13 @@
 
 using namespace std;
 
-DModelLearner::DModelLearner()
+DModelLearner::DModelLearner(const string& reference_frame)
 {
   num_hypotheses_ = 0;
+  grasp_idx_ = -1;
+  reference_frame_ = reference_frame;
+  viz_ = new LTMViz("d_model_viz");
+  viz_->SetReferenceFrame(reference_frame_);
 }
 
 DModelLearner::~DModelLearner()
@@ -67,6 +71,7 @@ void DModelLearner::SetSimTimeStep(double del_t)
 
 void DModelLearner::LearnTransitions(const std::string obs_file, std::vector<Transition>* transitions)
 {
+  assert(grasp_idx_ != -1);
   vector<geometry_msgs::PoseArray> observations;
   vector<tf::Vector3> forces;
   ReadObservationsFromFile(obs_file, &observations, &forces);
@@ -82,6 +87,14 @@ void DModelLearner::LearnTransitions(const vector<geometry_msgs::PoseArray>& obs
   if (num_observations <= 1)
   {
     return;
+  }
+
+  // Playback the observations and forces
+  for (int ii = 0; ii < num_observations - 1; ++ii)
+  {
+    viz_->VisualizePoints(observations[ii]);
+    viz_->VisualizeForcePrim(forces[ii], observations[ii].poses[grasp_idx_]);
+    sleep(1.0);
   }
 
   /**DEBUG

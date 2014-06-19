@@ -47,9 +47,11 @@ class LTMViz
     void PublishMarker(visualization_msgs::Marker& marker);
     void PublishMarkerArray(visualization_msgs::MarkerArray& marker_array);
     
+    void VisualizePoints(const geometry_msgs::PoseArray& dmodel_points);
+    void VisualizePoints(const geometry_msgs::PoseArray& dmodel_points, ltm::RGBA point_color);
 
-    void VisualizeModel(const EdgeMap& edge_map, const geometry_msgs::PoseArray& dmodel_points, ltm::RGBA edge_color, ltm::RGBA point_color);
     void VisualizeModel(const EdgeMap& edge_map, const geometry_msgs::PoseArray& dmodel_points);
+    void VisualizeModel(const EdgeMap& edge_map, const geometry_msgs::PoseArray& dmodel_points, ltm::RGBA edge_color, ltm::RGBA point_color);
 
     void VisualizeForcePrim(const tf::Vector3 force, const geometry_msgs::Pose end_effector_pose);
     void VisualizeForcePrim(const tf::Vector3 force, const geometry_msgs::Pose end_effector_pose, const ltm::RGBA color);

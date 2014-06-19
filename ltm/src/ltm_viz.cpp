@@ -32,6 +32,41 @@ void LTMViz::SetReferenceFrame(string frame)
   reference_frame_ = frame;
 }
 
+void LTMViz::VisualizePoints(const geometry_msgs::PoseArray& dmodel_points)
+{
+  ltm::RGBA point_color(1.0, 0.0, 0.0, 1.0);
+  VisualizePoints(dmodel_points, point_color);
+}
+
+void LTMViz::VisualizePoints(const geometry_msgs::PoseArray& dmodel_points, ltm::RGBA point_color)
+{
+  visualization_msgs::MarkerArray marker_array;
+
+  visualization_msgs::Marker points_marker;
+  points_marker.header.frame_id = reference_frame_;
+  points_marker.header.stamp = ros::Time::now();
+  points_marker.ns = "points";
+  points_marker.action = visualization_msgs::Marker::ADD;
+  points_marker.pose.orientation.x = points_marker.pose.orientation.y = points_marker.pose.orientation.z = 0;
+  points_marker.pose.orientation.w = 1;
+  points_marker.id = 0;
+  points_marker.type = visualization_msgs::Marker::SPHERE_LIST;
+  points_marker.scale.x = points_marker.scale.y = points_marker.scale.z = 0.05;
+  points_marker.color.r = point_color.r;
+  points_marker.color.g = point_color.g;
+  points_marker.color.b = point_color.b;
+  points_marker.color.a = point_color.a;
+  points_marker.lifetime = ros::Duration(1000.0);
+  for (size_t ii = 0; ii < dmodel_points.poses.size(); ++ii)
+  {
+    geometry_msgs::Pose p = dmodel_points.poses[ii];
+    // TODO: Skip grasp points
+    points_marker.points.push_back(p.position);
+  }
+  marker_array.markers.push_back(points_marker);
+  PublishMarkerArray(marker_array);
+}
+
 void LTMViz::VisualizeModel(const EdgeMap& edge_map, const geometry_msgs::PoseArray& dmodel_points)
 {
   ltm::RGBA edge_color(0.0, 0.0, 1.0, 1.0);
@@ -113,7 +148,7 @@ void LTMViz::VisualizeForcePrim(const tf::Vector3 force, const geometry_msgs::Po
   marker.scale.x = 0.04;
   marker.scale.y = 0.12;
   marker.scale.z = 0.0;
-  marker.color.r = color.a;
+  marker.color.r = color.r;
   marker.color.g = color.g;
   marker.color.b = color.b;
   marker.color.a = color.a;

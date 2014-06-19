@@ -17,6 +17,8 @@ const char kTest1SwitchingSequence[] = "/usr0/home/venkatrn/groovy_workspace/san
 
 const char kSphere20FPrims[] = "/usr0/home/venkatrn/groovy_workspace/sandbox/ltm_stack/ltm/matlab/fprims/sphere_20.fprim";
 
+const string kReferenceFrame = "map";
+
 class DModelLearnerTest : public testing::Test 
 {
   protected:
@@ -38,7 +40,7 @@ class DModelLearnerTest : public testing::Test
 
 TEST_F(DModelLearnerTest, Test1FixedModel)
 {
-      learner = new DModelLearner;
+      learner = new DModelLearner(kReferenceFrame);
       transitions.clear();
       candidate_models.clear();
 
@@ -55,7 +57,7 @@ TEST_F(DModelLearnerTest, Test1FixedModel)
 
 TEST_F(DModelLearnerTest, Test1PrismaticModel)
 {
-      learner = new DModelLearner;
+      learner = new DModelLearner(kReferenceFrame);
       transitions.clear();
       candidate_models.clear();
 
@@ -72,7 +74,7 @@ TEST_F(DModelLearnerTest, Test1PrismaticModel)
 
 TEST_F(DModelLearnerTest, Test1SwitchingModel)
 {
-      learner = new DModelLearner;
+      learner = new DModelLearner(kReferenceFrame);
       transitions.clear();
       candidate_models.clear();
 

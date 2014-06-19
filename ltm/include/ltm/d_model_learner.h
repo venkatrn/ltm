@@ -9,6 +9,7 @@
 #include <ltm/abstract_model.h>
 #include <ltm/d_model.h>
 #include <ltm/d_model_utils.h>
+#include <ltm/ltm_viz.h>
 
 struct Transition
 {
@@ -23,7 +24,7 @@ class DModelLearner
 {
   public:
     /**@brief Constructor **/
-    DModelLearner();
+    explicit DModelLearner(const std::string& reference_frame);
 
     /**@brief Destructor **/
     ~DModelLearner();
@@ -54,6 +55,8 @@ class DModelLearner
     int num_hypotheses_; ///< Number of candidate models 
     double del_t_; ///< Timestep for forward simulation of candidate models 
     int grasp_idx_; // TODO: This should be allowed to vary for each observation-action pair
+    std::string reference_frame_;
+    LTMViz* viz_;
     /// Candidate D-models. These are 'static' models--their edge parameters do not change.
     std::vector<DModel*> candidate_models_;
     /// Compute squared error between two point clouds
