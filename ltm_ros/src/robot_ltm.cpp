@@ -145,6 +145,7 @@ void RobotLTM::GraspCB(const geometry_msgs::PoseStampedConstPtr& grasp_pose)
   // Set the grasp pose, to transform the end effector trajectory later
   grasp_pose_ = grasp_pose_ref_frame.pose;
   d_model_->AddGraspPoint(grasp_pose_);
+  ROS_INFO("[LTM Node]: Added new grasp point"); 
   // TODO: Make this general
   geometry_msgs::PoseArray points = d_model_->GetDModelPoints();
   grasp_idxs_.push_back(points.poses.size() - 1);

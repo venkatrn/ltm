@@ -15,15 +15,15 @@ LTMViz::LTMViz(const std::string& ns)
   {
     std::stringstream ss;
     ss << "/" << ns << "/visualization_marker_array";
-    marker_array_publisher_ = nh_.advertise<visualization_msgs::MarkerArray>(ss.str(), 500);
+    marker_array_publisher_ = nh_.advertise<visualization_msgs::MarkerArray>(ss.str(), 500, true);
     ss.str(std::string());
     ss << "/" << ns << "/visualization_marker";
-    marker_publisher_ = nh_.advertise<visualization_msgs::Marker>(ss.str(), 1000);
+    marker_publisher_ = nh_.advertise<visualization_msgs::Marker>(ss.str(), 1000, true);
   }
   else
   {
-    marker_array_publisher_ = nh_.advertise<visualization_msgs::MarkerArray>("visualization_marker_array", 500);
-    marker_publisher_ = nh_.advertise<visualization_msgs::Marker>("visualization_marker", 1000);
+    marker_array_publisher_ = nh_.advertise<visualization_msgs::MarkerArray>("visualization_marker_array", 500, true);
+    marker_publisher_ = nh_.advertise<visualization_msgs::Marker>("visualization_marker", 1000, true);
   }
 }
 
@@ -32,71 +32,66 @@ void LTMViz::SetReferenceFrame(string frame)
   reference_frame_ = frame;
 }
 
-
-void LTMViz::VisualizePoints(const geometry_msgs::PoseArray poses)
+void LTMViz::VisualizeModel(const EdgeMap& edge_map, const geometry_msgs::PoseArray& dmodel_points)
 {
-  ltm::RGBA color(1.0, 0.0, 0.0, 1.0); 
-  VisualizePoints(poses, color);
+  ltm::RGBA edge_color(0.0, 0.0, 1.0, 1.0);
+  ltm::RGBA point_color(1.0, 0.0, 0.0, 1.0);
+  VisualizeModel(edge_map, dmodel_points, edge_color, point_color);
 }
 
-void LTMViz::VisualizePoints(const geometry_msgs::PoseArray poses, const ltm::RGBA color)
+void LTMViz::VisualizeModel(const EdgeMap& edge_map, const geometry_msgs::PoseArray& dmodel_points, ltm::RGBA edge_color, ltm::RGBA point_color)
 {
-  visualization_msgs::Marker points;
-  points.header.frame_id = reference_frame_;
-  points.header.stamp = ros::Time::now();
-  points.ns = "points";
-  points.action = visualization_msgs::Marker::ADD;
-  points.pose.orientation.x = points.pose.orientation.y = points.pose.orientation.z = 0;
-  points.pose.orientation.w = 1;
-  points.id = 0;
-  points.type = visualization_msgs::Marker::SPHERE_LIST;
-  points.scale.x = points.scale.y = points.scale.z = 0.05;
-  points.color.r = color.r;
-  points.color.g = color.g;
-  points.color.b = color.b;
-  points.color.a = color.a;
-  for (size_t ii = 0; ii < poses.poses.size(); ++ii)
+  visualization_msgs::MarkerArray marker_array;
+
+  visualization_msgs::Marker points_marker;
+  points_marker.header.frame_id = reference_frame_;
+  points_marker.header.stamp = ros::Time::now();
+  points_marker.ns = "points";
+  points_marker.action = visualization_msgs::Marker::ADD;
+  points_marker.pose.orientation.x = points_marker.pose.orientation.y = points_marker.pose.orientation.z = 0;
+  points_marker.pose.orientation.w = 1;
+  points_marker.id = 0;
+  points_marker.type = visualization_msgs::Marker::SPHERE_LIST;
+  points_marker.scale.x = points_marker.scale.y = points_marker.scale.z = 0.05;
+  points_marker.color.r = point_color.r;
+  points_marker.color.g = point_color.g;
+  points_marker.color.b = point_color.b;
+  points_marker.color.a = point_color.a;
+  points_marker.lifetime = ros::Duration(1000.0);
+  for (size_t ii = 0; ii < dmodel_points.poses.size(); ++ii)
   {
-    geometry_msgs::Pose p = poses.poses[ii];
+    geometry_msgs::Pose p = dmodel_points.poses[ii];
     // TODO: Skip grasp points
-    points.points.push_back(p.position);
+    points_marker.points.push_back(p.position);
   }
-  // Publish points
-  PublishMarker(points);
-}
+  marker_array.markers.push_back(points_marker);
 
-void LTMViz::VisualizeEdges(const EdgeMap& edge_map, const geometry_msgs::PoseArray& dmodel_points)
-{
-  ltm::RGBA color(0.0, 0.0, 1.0, 1.0);
-  VisualizeEdges(edge_map, dmodel_points, color);
-}
-
-void LTMViz::VisualizeEdges(const EdgeMap& edge_map, const geometry_msgs::PoseArray& dmodel_points, const ltm::RGBA color)
-{
-  visualization_msgs::Marker edges;
-  edges.header.frame_id = reference_frame_;
-  edges.header.stamp = ros::Time::now();
-  edges.ns = "edges";
-  edges.action = visualization_msgs::Marker::ADD;
-  edges.pose.orientation.x = edges.pose.orientation.y = edges.pose.orientation.z = 0;
-  edges.pose.orientation.w = 1;
-  edges.id = 0;
-  edges.type = visualization_msgs::Marker::LINE_LIST;
-  edges.color.r = color.r;
-  edges.color.g = color.g;
-  edges.color.b = color.b;
-  edges.color.a = color.a;
-  edges.scale.x = 0.02;
+  visualization_msgs::Marker edges_marker;
+  edges_marker.header.frame_id = reference_frame_;
+  edges_marker.header.stamp = ros::Time::now();
+  edges_marker.ns = "edges_marker";
+  edges_marker.action = visualization_msgs::Marker::ADD;
+  edges_marker.pose.orientation.x = edges_marker.pose.orientation.y = edges_marker.pose.orientation.z = 0;
+  edges_marker.pose.orientation.w = 1;
+  edges_marker.id = 0;
+  edges_marker.type = visualization_msgs::Marker::LINE_LIST;
+  edges_marker.color.r = edge_color.r;
+  edges_marker.color.g = edge_color.g;
+  edges_marker.color.b = edge_color.b;
+  edges_marker.color.a = edge_color.a;
+  edges_marker.scale.x = 0.02;
+  edges_marker.lifetime = ros::Duration(1000.0);
 
   for (auto it = edge_map.begin(); it != edge_map.end(); ++it)
   {
     // TODO: Skip grasp points
-    edges.points.push_back(dmodel_points.poses[it->first.first].position);
-    edges.points.push_back(dmodel_points.poses[it->first.second].position);
+    edges_marker.points.push_back(dmodel_points.poses[it->first.first].position);
+    edges_marker.points.push_back(dmodel_points.poses[it->first.second].position);
   }
-  PublishMarker(edges);
-}
+  marker_array.markers.push_back(edges_marker);
 
+  PublishMarkerArray(marker_array);
+}
 
 void LTMViz::VisualizeForcePrim(const tf::Vector3 force, const geometry_msgs::Pose end_effector_pose)
 {
@@ -109,7 +104,7 @@ void LTMViz::VisualizeForcePrim(const tf::Vector3 force, const geometry_msgs::Po
   visualization_msgs::Marker marker;
   marker.header.frame_id = reference_frame_;
   marker.header.stamp = ros::Time::now();
-  marker.ns = "marker";
+  marker.ns = "force";
   marker.action = visualization_msgs::Marker::ADD;
   marker.pose.orientation.x = marker.pose.orientation.y = marker.pose.orientation.z = 0;
   marker.pose.orientation.w = 1;

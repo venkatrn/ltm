@@ -15,7 +15,7 @@
 
 using namespace std;
 
-const int kMaxPlannerExpansions = 1000;//1000
+const int kMaxPlannerExpansions = 5000;//1000
 
 DModelPlanner::DModelPlanner()
 {

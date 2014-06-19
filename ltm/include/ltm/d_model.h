@@ -13,6 +13,7 @@ void operator=(const TypeName&)
 #include <ltm/abstract_model.h>
 #include <ltm/d_model_structs.h>
 #include <ltm/d_model_utils.h>
+#include <ltm/ltm_viz.h>
 
 #include <ros/ros.h>
 #include <geometry_msgs/PoseArray.h>
@@ -177,7 +178,6 @@ class DModel : public AbstractModel
     State_t GetStateFromStateID(int state_id);
 
   private:
-    ros::NodeHandle nh;
     std::string reference_frame_;
     geometry_msgs::PoseArray points_;
     /**@brief Mapping from (i,j) to edge(i,j)**/
@@ -187,9 +187,9 @@ class DModel : public AbstractModel
     /**@brief Mapping from State to State ID**/
     std::unordered_map<int, State_t> StateMap;
 
-    ros::Publisher points_pub_;
-    ros::Publisher edges_pub_;
-    ros::Publisher force_pub_;
+    /**@brief DModel Visualizer**/
+    LTMViz* viz_;
+
     tf::TransformListener listener_;
 
     bool visualize_dmodel_;

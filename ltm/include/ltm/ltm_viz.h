@@ -23,10 +23,10 @@ namespace ltm {
     double r, g, b, a;
     RGBA()
     {
-      r = g = b = 0;
-      a = 1;
+      r = g = b = 0.0;
+      a = 1.0;
     }
-    RGBA(double red, double blue, double green, double alpha)
+    RGBA(double red, double green, double blue, double alpha)
     {
       r = red;
       g = green;
@@ -47,11 +47,9 @@ class LTMViz
     void PublishMarker(visualization_msgs::Marker& marker);
     void PublishMarkerArray(visualization_msgs::MarkerArray& marker_array);
     
-    void VisualizePoints(const geometry_msgs::PoseArray poses);
-    void VisualizePoints(const geometry_msgs::PoseArray poses, const ltm::RGBA color);
 
-    void VisualizeEdges(const EdgeMap& edge_map, const geometry_msgs::PoseArray& dmodel_points);
-    void VisualizeEdges(const EdgeMap& edge_map, const geometry_msgs::PoseArray& dmodel_points, const ltm::RGBA color);
+    void VisualizeModel(const EdgeMap& edge_map, const geometry_msgs::PoseArray& dmodel_points, ltm::RGBA edge_color, ltm::RGBA point_color);
+    void VisualizeModel(const EdgeMap& edge_map, const geometry_msgs::PoseArray& dmodel_points);
 
     void VisualizeForcePrim(const tf::Vector3 force, const geometry_msgs::Pose end_effector_pose);
     void VisualizeForcePrim(const tf::Vector3 force, const geometry_msgs::Pose end_effector_pose, const ltm::RGBA color);

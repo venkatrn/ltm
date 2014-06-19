@@ -16,7 +16,7 @@
 // Multiplier for edge costs to avoid working with floating point numbers.
 const double kCostMultiplier = 1e3;
 // Error tolerance for comparing goal point locations.
-const double kGoalTolerance = 0.01; //0.05, 0.01 for experiments
+const double kGoalTolerance = 0.1; //0.05, 0.01 for experiments
 
 using namespace std;
 
@@ -25,9 +25,8 @@ DModel::DModel(const string& reference_frame)
   reference_frame_ = reference_frame;
   edge_map_ = new unordered_map<Edge, EdgeParams, pair_hash>();
 
-  points_pub_ = nh.advertise<visualization_msgs::Marker>("d_model_points", 5, true);
-  edges_pub_ = nh.advertise<visualization_msgs::Marker>("d_model_edges", 5, true);
-  force_pub_ = nh.advertise<visualization_msgs::Marker>("d_model_forces", 5);
+  viz_ = new LTMViz("d_model_viz");
+  viz_->SetReferenceFrame(reference_frame);
 
   // Initialize env params
   env_cfg_.start_state_id = -1;
@@ -40,7 +39,6 @@ DModel::DModel()
 {
   ROS_ERROR("Deprecated Constructor");
 }
-
 
 DModel::~DModel() 
 {
@@ -198,13 +196,6 @@ void DModel::AddEdge(Edge e, EdgeParams e_params)
   if (adj_list_.size() == 0)
   {
     adj_list_.resize(points_.poses.size());
-    //TODO: This should not be needed at all
-    /*
-       if (edge_map_ == nullptr)
-       {
-       edge_map_ = new unordered_map<Edge, EdgeParams, pair_hash>;
-       }
-       */
   }
   // TODO: Do this in a smarter way?
   if (find(adj_list_[e.first].begin(), adj_list_[e.first].end(), e.second) == adj_list_[e.first].end())
@@ -240,6 +231,7 @@ void DModel::AddPoint(geometry_msgs::Pose p)
 
 void DModel::AddGraspPoint(geometry_msgs::Pose p)
 {
+  ROS_INFO("Adding grasp point");
   // This is a special case where a point can be added after the model is learnt.
   // Find the closest point
   double min_dist = 100000;
@@ -272,21 +264,21 @@ void DModel::TFTimedCallback(const ros::TimerEvent& event)
 
 void DModel::TFCallback(geometry_msgs::PoseArray dmodel_points)
 {
-  tf::Transform transform;
+  /*
+  for (auto it = edge_map_->begin(); it != edge_map_->end(); ++it)
+  {
+    // Skip edges involving grasp point
+    if (find(grasp_idxs_.begin(), grasp_idxs_.end(), it->first.first) != grasp_idxs_.end()
+        || find(grasp_idxs_.begin(), grasp_idxs_.end(), it->first.second) != grasp_idxs_.end())
+    {
+      continue;
+    }
+    edges.points.push_back(dmodel_points.poses[it->first.first].position);
+    edges.points.push_back(dmodel_points.poses[it->first.second].position);
+  }
+  */
 
-  visualization_msgs::Marker points;
-  points.header.frame_id = reference_frame_;
-  points.header.stamp = ros::Time::now();
-  points.ns = "points";
-  points.action = visualization_msgs::Marker::ADD;
-  points.pose.orientation.x = points.pose.orientation.y = points.pose.orientation.z = 0;
-  points.pose.orientation.w = 1;
-  points.id = 0;
-  points.type = visualization_msgs::Marker::SPHERE_LIST;
-  points.scale.x = points.scale.y = points.scale.z = 0.05;
-  points.color.g = points.color.b =  0.0;
-  points.color.r = 1.0;
-  points.color.a = 1.0;
+  tf::Transform transform;
 
   for (size_t ii = 0; ii < points_.poses.size(); ++ii)
   {
@@ -302,45 +294,14 @@ void DModel::TFCallback(geometry_msgs::PoseArray dmodel_points)
     {
       continue;
     }
-    points.points.push_back(p.position);
+    //points.points.push_back(p.position);
   }
 
-  if (!visualize_dmodel_)
+  if (visualize_dmodel_)
   {
-    return;
+    // TODO: For now visualize all points, including the grasp points
+    viz_->VisualizeModel(*edge_map_, dmodel_points);
   }
-
-  // Publish points
-  points_pub_.publish(points);
-
-  // Visualize edges
-  visualization_msgs::Marker edges;
-  edges.header.frame_id = reference_frame_;
-  edges.header.stamp = ros::Time::now();
-  edges.ns = "edges";
-  edges.action = visualization_msgs::Marker::ADD;
-  edges.pose.orientation.x = edges.pose.orientation.y = edges.pose.orientation.z = 0;
-  edges.pose.orientation.w = 1;
-  edges.id = 0;
-  edges.type = visualization_msgs::Marker::LINE_LIST;
-  edges.scale.x = 0.02;
-  edges.color.r = edges.color.g =  0.0;
-  edges.color.b = 1.0;
-  edges.color.a = 1.0;
-
-  for (auto it = edge_map_->begin(); it != edge_map_->end(); ++it)
-  {
-    // Skip edges involving grasp point
-    if (find(grasp_idxs_.begin(), grasp_idxs_.end(), it->first.first) != grasp_idxs_.end()
-        || find(grasp_idxs_.begin(), grasp_idxs_.end(), it->first.second) != grasp_idxs_.end())
-    {
-      continue;
-    }
-    edges.points.push_back(dmodel_points.poses[it->first.first].position);
-    edges.points.push_back(dmodel_points.poses[it->first.second].position);
-  }
-  edges_pub_.publish(edges);
-
   return;
 }
 
@@ -819,33 +780,12 @@ void DModel::SimulatePlan(const vector<tf::Vector3>& forces, const vector<int>& 
   {
     geometry_msgs::PoseArray out_points;
     GetNextState(in_points, grasp_points[ii], forces[ii], env_cfg_.sim_time_step, &out_points);
-    TFCallback(out_points);
+    // TODO: remove this
+    // TFCallback(out_points);
+    viz_->VisualizeModel(*edge_map_, out_points);
 
     // Visualize force
-    visualization_msgs::Marker force;
-    force.header.frame_id = reference_frame_;
-    force.header.stamp = ros::Time::now();
-    force.ns = "force";
-    force.action = visualization_msgs::Marker::ADD;
-    force.pose.orientation.x = force.pose.orientation.y = force.pose.orientation.z = 0;
-    force.pose.orientation.w = 1;
-    force.id = 0;
-    force.type = visualization_msgs::Marker::ARROW;
-    force.scale.x = 0.04;
-    force.scale.y = 0.12;
-    force.scale.z = 0.0;
-    force.color.r = force.color.b =  0.0;
-    force.color.g = 1.0;
-    force.color.a = 1.0;
-    geometry_msgs::Point start_point = out_points.poses[grasp_points[ii]].position;
-    geometry_msgs::Point end_point;
-    const double normalizer = Norm(forces[ii]);
-    end_point.x = start_point.x + forces[ii].x()/normalizer;
-    end_point.y = start_point.y + forces[ii].y()/normalizer;
-    end_point.z = start_point.z + forces[ii].z()/normalizer;
-    force.points.push_back(start_point);
-    force.points.push_back(end_point);
-    force_pub_.publish(force);
+    viz_->VisualizeForcePrim(forces[ii], out_points.poses[grasp_points[ii]]);
 
     in_points = out_points;
     usleep(100000);
@@ -873,7 +813,9 @@ void DModel::VisualizeState(int state_id)
       points.poses.push_back(points_.poses[ii]);
     }
   }
-  TFCallback(points);
+  viz_->VisualizeModel(*edge_map_, points);
+  // TODO: remove this
+  //TFCallback(points);
   return;
 }
 
@@ -1170,6 +1112,7 @@ double DModel::GetGoalHeuristic(int state_id)
 
 void DModel::AddGraspIdx(int grasp_idx)
 {
+  ROS_INFO("Adding grasp index");
   if (grasp_idx >= int(points_.poses.size()))
   {
     ROS_ERROR("DModel: Invalid force index\n");
@@ -1512,7 +1455,7 @@ void DModel::LearnDModelParameters(const vector<geometry_msgs::PoseArray>& obser
         p_prismatic_vec = MultivariateNormalPDF(p_vec, p_mu, cvec_covariance);
       }
 
-      ROS_DEBUG("%d %d: %f %f %f %f\n", p_dist, p_c_vec, p_prismatic_vec, p_axis_vec, edges[ii].first, edges[ii].second);
+      ROS_DEBUG("%f %f: %f %f %d %d\n", p_dist, p_c_vec, p_prismatic_vec, p_axis_vec, edges[ii].first, edges[ii].second);
       //p_rigid[ii] *= p_dist * p_c_vec;
       if (fabs(p_prismatic_vec - 1.0) < kFPTolerance || fabs(p_axis_vec - 1.0) < kFPTolerance)
       {
@@ -1879,7 +1822,7 @@ void DModel::LearnDModelParametersExperimental(const vector<geometry_msgs::PoseA
         p_prismatic_vec = MultivariateNormalPDF(p_vec, p_mu, cvec_covariance);
       }
 
-      ROS_DEBUG("%d %d: %f %f %f %f\n", p_dist, p_c_vec, p_prismatic_vec, p_axis_vec, edges[ii].first, edges[ii].second);
+      ROS_DEBUG("%f %f: %f %f %d %d\n", p_dist, p_c_vec, p_prismatic_vec, p_axis_vec, edges[ii].first, edges[ii].second);
       //p_rigid[ii] *= p_dist * p_c_vec;
       if (fabs(p_prismatic_vec - 1.0) < kFPTolerance || fabs(p_axis_vec - 1.0) < kFPTolerance)
       {
