@@ -1,5 +1,5 @@
 /**
- * @file real_ltm.cpp
+ * @file robot_ltm.cpp
  * @author Venkatraman Narayanan
  * Carnegie Mellon University, 2014
  */
