@@ -17,6 +17,8 @@ const char kTest1SwitchingSequence[] = "/usr0/home/venkatrn/groovy_workspace/san
 
 const char kSphere20FPrims[] = "/usr0/home/venkatrn/groovy_workspace/sandbox/ltm_stack/ltm/matlab/fprims/sphere_20.fprim";
 
+const char kObservationsFile[] = "/usr0/home/venkatrn/groovy_workspace/sandbox/ltm_stack/ltm_ros/data/observations.txt";
+
 const string kReferenceFrame = "map";
 
 class DModelLearnerTest : public testing::Test 
@@ -38,6 +40,7 @@ class DModelLearnerTest : public testing::Test
 
 };
 
+/*
 TEST_F(DModelLearnerTest, Test1FixedModel)
 {
       learner = new DModelLearner(kReferenceFrame);
@@ -85,6 +88,22 @@ TEST_F(DModelLearnerTest, Test1SwitchingModel)
       learner->LearnTransitions(string(kTest1SwitchingSequence), &transitions);
       
       EXPECT_EQ(1, transitions.size());
+
+      delete learner;
+}
+*/
+TEST_F(DModelLearnerTest, TestObservations)
+{
+      learner = new DModelLearner(kReferenceFrame);
+      transitions.clear();
+      candidate_models.clear();
+
+      candidate_models.push_back(string(kTest1FixedModel));
+      candidate_models.push_back(string(kTest1PrismaticModel));
+
+      learner->InitializeCandidateModels(candidate_models, kSphere20FPrims, 0, 0.5);
+      learner->PlaybackObservations(kObservationsFile);
+      learner->LearnPrior(kObservationsFile);
 
       delete learner;
 }

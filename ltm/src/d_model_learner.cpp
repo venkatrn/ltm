@@ -9,7 +9,14 @@
 #include <cassert>
 #include <string>
 
+#include <articulation_models/models/factory.h>
+#include <articulation_msgs/ModelMsg.h>
+#include <articulation_msgs/TrackMsg.h>
+#include <articulation_msgs/ParamMsg.h>
+
 using namespace std;
+using namespace articulation_models;
+using namespace articulation_msgs;
 
 DModelLearner::DModelLearner(const string& reference_frame)
 {
@@ -69,6 +76,34 @@ void DModelLearner::SetSimTimeStep(double del_t)
   del_t_ = del_t;
 }
 
+void DModelLearner::PlaybackObservations(const std::string obs_file)
+{
+  vector<geometry_msgs::PoseArray> observations;
+  vector<tf::Vector3> forces;
+  ReadObservationsFromFile(obs_file, &observations, &forces);
+  PlaybackObservations(observations, forces);
+}
+
+void DModelLearner::PlaybackObservations(const std::vector<geometry_msgs::PoseArray>& observations, const std::vector<tf::Vector3>& forces)
+{
+  assert(grasp_idx_ != -1);
+  const int num_observations = observations.size();
+  if (num_observations <= 1)
+  {
+    return;
+  }
+  const bool forces_available = (observations.size() == forces.size() + 1);
+  for (int ii = 0; ii < num_observations - 1; ++ii)
+  {
+    viz_->VisualizePoints(observations[ii]);
+    if (forces_available)
+    {
+    viz_->VisualizeForcePrim(forces[ii], observations[ii].poses[grasp_idx_]);
+    }
+    usleep(100000);
+  }
+}
+
 void DModelLearner::LearnTransitions(const std::string obs_file, std::vector<Transition>* transitions)
 {
   assert(grasp_idx_ != -1);
@@ -90,12 +125,7 @@ void DModelLearner::LearnTransitions(const vector<geometry_msgs::PoseArray>& obs
   }
 
   // Playback the observations and forces
-  for (int ii = 0; ii < num_observations - 1; ++ii)
-  {
-    viz_->VisualizePoints(observations[ii]);
-    viz_->VisualizeForcePrim(forces[ii], observations[ii].poses[grasp_idx_]);
-    sleep(1.0);
-  }
+  PlaybackObservations(observations, forces);
 
   /**DEBUG
   for (int ii = 0; ii < num_observations; ++ii)
@@ -170,6 +200,92 @@ void DModelLearner::LearnTransitions(const vector<geometry_msgs::PoseArray>& obs
     }
   }
   return;
+}
+
+void DModelLearner::LearnPrior(const std::string obs_file)
+{
+  vector<geometry_msgs::PoseArray> observations;
+  vector<tf::Vector3> forces;
+  ReadObservationsFromFile(obs_file, &observations, &forces);
+  LearnPrior(observations);
+}
+
+void DModelLearner::LearnPrior(const std::vector<geometry_msgs::PoseArray>& observations)
+{
+  assert(grasp_idx_ != -1);
+  geometry_msgs::PoseArray end_eff_traj;
+  const int num_observations = observations.size();
+  if (num_observations <= 1)
+  {
+    ROS_WARN("[DModel Learner]: Not enough observations to compute a prior"); 
+    return;
+  }
+  for (int ii = 0; ii < num_observations; ++ii)
+  {
+    end_eff_traj.poses.push_back(observations[ii].poses[grasp_idx_]);
+  }
+  LearnPrior(end_eff_traj);
+}
+
+void DModelLearner::LearnPrior(const geometry_msgs::PoseArray& end_eff_traj)
+{
+  const int num_poses = int(end_eff_traj.poses.size());
+  if (num_poses <= 1)
+  {
+    ROS_WARN("[DModel Learner]: Not enough poses in end-effector trajectory to compute a prior"); 
+    return;
+  }
+
+  MultiModelFactory factory;
+  ModelMsg model_msg;
+  model_msg.name = "rotational";
+  ParamMsg sigma_param;
+  sigma_param.name = "sigma_position";
+  sigma_param.value = 0.02;
+  sigma_param.type = ParamMsg::PRIOR;
+  model_msg.params.push_back(sigma_param);
+
+  model_msg.track.header.stamp = ros::Time();
+  model_msg.track.header.frame_id = reference_frame_;
+
+  model_msg.track.pose = end_eff_traj.poses;
+  /*
+  for (int ii = 0; ii < num_poses; ++ii) {
+    model_msg.track.pose.push_back(end_eff_traj.poses[ii]);
+  }
+  */
+  GenericModelPtr model_instance = factory.restoreModel(model_msg);
+  model_instance->fitModel();
+  model_instance->evaluateModel();
+  string model_class = model_instance->getModelName();
+  double model_llh = model_instance->getLogLikelihood(true);
+
+  ROS_INFO("Model Class: %s", model_class.c_str());
+  ROS_INFO("Model Log LH: %f", model_llh);
+  if (model_class.compare("rotational") == 0)
+  {
+    double rad = model_instance->getParam("rot_radius");
+    double c_x = model_instance->getParam("rot_center.x");
+    double c_y = model_instance->getParam("rot_center.y");
+    double c_z = model_instance->getParam("rot_center.z");
+    double o_x = model_instance->getParam("rot_axis.x");
+    double o_y = model_instance->getParam("rot_axis.y");
+    double o_z = model_instance->getParam("rot_axis.z");
+    double o_w = model_instance->getParam("rot_axis.w");
+    ROS_INFO("Center: %f %f %f, Radius: %f", c_x, c_y, c_z, rad);
+    geometry_msgs::Pose axis;
+    axis.position.x = c_x;
+    axis.position.y = c_y;
+    axis.position.z = c_z;
+    axis.orientation.x = o_x;
+    axis.orientation.y = o_y;
+    axis.orientation.z = o_z;
+    axis.orientation.w = o_w;
+    viz_->VisualizeAxis(axis);
+  }
+  else if (model_class.compare("prismatic") == 0)
+  {
+  }
 }
 
 double DModelLearner::ComputeSquaredError(const geometry_msgs::PoseArray pts1, const geometry_msgs::PoseArray pts2)
@@ -258,8 +374,8 @@ void DModelLearner::ReadObservationsFromFile(const string obs_file, vector<geome
   {
     if (fscanf(f_obs, "%f %f %f\n", &x, &y, &z) != 3)
     {
-      ROS_ERROR("Error reading forces in observations file");
-      return;
+      ROS_WARN("Force data is missing/incorrect in observations file");
+      break;
     }
     tf::Vector3 force(x, y, z);
     forces->push_back(force);

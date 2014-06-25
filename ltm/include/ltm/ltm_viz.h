@@ -56,6 +56,8 @@ class LTMViz
     void VisualizeForcePrim(const tf::Vector3 force, const geometry_msgs::Pose end_effector_pose);
     void VisualizeForcePrim(const tf::Vector3 force, const geometry_msgs::Pose end_effector_pose, const ltm::RGBA color);
 
+    void VisualizeAxis(const geometry_msgs::Pose axis);
+
   private:
     ros::NodeHandle nh_;
     ros::Publisher marker_array_publisher_;

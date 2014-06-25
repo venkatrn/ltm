@@ -11,6 +11,7 @@
 #include <ltm/d_model_utils.h>
 #include <ltm/ltm_viz.h>
 
+
 struct Transition
 {
   int latent_in;
@@ -51,6 +52,15 @@ class DModelLearner
     /**@brief Ditto, but observation-action sequence is loaded from file**/
     void LearnTransitions(const std::string obs_file, std::vector<Transition>* transitions);
 
+    /**@brief Playback observations**/
+    void PlaybackObservations(const std::string obs_file);
+    void PlaybackObservations(const std::vector<geometry_msgs::PoseArray>& observations, const std::vector<tf::Vector3>& forces);
+
+    /**@brief Learn prior from observation**/
+    void LearnPrior(const std::string obs_file);
+    void LearnPrior(const std::vector<geometry_msgs::PoseArray>& observations);
+    void LearnPrior(const geometry_msgs::PoseArray& end_eff_traj);
+
   private:
     int num_hypotheses_; ///< Number of candidate models 
     double del_t_; ///< Timestep for forward simulation of candidate models 
@@ -64,6 +74,7 @@ class DModelLearner
 
     /// Utility to read observation-action sequence from text file
     void ReadObservationsFromFile(const std::string obs_file, std::vector<geometry_msgs::PoseArray>* observations, std::vector<tf::Vector3>* forces);
+    void ReadObservationsFromFile(const std::string obs_file, std::vector<geometry_msgs::PoseArray>* observations);
 
 };
 
