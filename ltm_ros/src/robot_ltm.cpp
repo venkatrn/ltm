@@ -117,11 +117,11 @@ void RobotLTM::LearnCB(const std_msgs::Int32ConstPtr& learning_mode)
   {
     // Stop AR Marker tracking, and pass observations to d_model
     ar_marker_tracking_ = false;
+    ROS_INFO("[LTM Node]: Finished recording %d frames", observations_.size());
     
     if (int(observations_.size()) == 0)
     {
-      ROS_INFO("LTM Node: Learning stopped before any observations have been received"
-          "No model will be learnt");
+      ROS_INFO("[LTM Node]: Learning stopped before any observations have been received. No model will be learnt");
       return;
     }
     SaveObservationsToFile(obs_file_.c_str());
@@ -278,6 +278,12 @@ void RobotLTM::ARMarkersCB(const ar_track_alvar_msgs::AlvarMarkersConstPtr& ar_m
   // Ensure we have same number of markers in each frame
   const int num_markers = int(ar_markers->markers.size());
 
+  // Skip if we did not see any markers
+  if (num_markers == 0)
+  {
+    return;
+  }
+
   // This is a hack (assuming fixed number of markers)
   /*
   const int num_tracked_markers = 3;
@@ -383,7 +389,7 @@ void RobotLTM::SetModelFromFile(const char *model_file)
 
 void RobotLTM::SaveObservationsToFile(const char* obs_file)
 {
-  FILE* f_obs = fopen(obs_file, "w");
+  FILE* f_obs = fopen(obs_file, "w+");
   const int num_frames = int(observations_.size());
   assert(num_frames > 0);
   const int num_points = int(observations_[0].poses.size());
