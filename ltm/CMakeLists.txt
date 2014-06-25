@@ -44,5 +44,5 @@ rosbuild_add_library(${PROJECT_NAME}
 rosbuild_add_gtest(test/learner_utest test/learner_utest.cpp)
 #target_link_libraries(test_d_model ${PROJECT_NAME})
 #target_link_libraries(test_env ${PROJECT_NAME})
-target_link_libraries(experiments ${PROJECT_NAME})
+#target_link_libraries(experiments ${PROJECT_NAME})
 target_link_libraries(test/learner_utest ${PROJECT_NAME})
