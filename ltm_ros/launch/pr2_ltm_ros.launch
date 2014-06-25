@@ -7,6 +7,8 @@
   <!--<include file="$(find ar_track_alvar)/launch/pr2_indiv_no_kinect.launch"/>-->
   <include file="$(find ar_track_alvar)/launch/pr2_indiv.launch"/>
 
+  <include file="$(find pr2_arm_kinemtics)/launch/pr2_ik_rarm_node.launch"/>
+
   <node pkg="ltm_ros" type="ltm_ros_node" name="ltm_ros" output="screen">
     <param name="use_model_file" value="false"/>
     <param name="fprims_file" value="$(find ltm)/matlab/fprims/circle_40.fprim"/>
