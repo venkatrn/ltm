@@ -299,7 +299,7 @@ void RobotLTM::ARMarkersCB(const ar_track_alvar_msgs::AlvarMarkersConstPtr& ar_m
     if (num_markers != int(observations_[0].poses.size()))
     // if (num_markers != num_tracked_markers) // Hack
     {
-      ROS_WARN("LTM Node: Number of markers ,%d in current frame does not match number being tracked %d. Dropping observation",
+      ROS_WARN("LTM Node: Number of markers (%d) in current frame does not match number being tracked (%d). Dropping observation",
           num_markers, int(observations_[0].poses.size()));
       return;
     }
@@ -389,7 +389,13 @@ void RobotLTM::SetModelFromFile(const char *model_file)
 
 void RobotLTM::SaveObservationsToFile(const char* obs_file)
 {
+
   FILE* f_obs = fopen(obs_file, "w+");
+  if (f_obs == NULL)
+  {
+    ROS_ERROR("[LTM Node]: Could not open observations file");
+    return;
+  }
   const int num_frames = int(observations_.size());
   assert(num_frames > 0);
   const int num_points = int(observations_[0].poses.size());
@@ -403,10 +409,10 @@ void RobotLTM::SaveObservationsToFile(const char* obs_file)
       fprintf(f_obs, "%f %f %f %f %f %f %f\n", p.position.x, p.position.y, p.position.z,
           p.orientation.x, p.orientation.y, p.orientation.z, p.orientation.w);
     }
-    printf("\n");
+    fprintf(f_obs, "\n");
   }
   fclose(f_obs);
-  ROS_INFO("Saved observations to file %s\n", obs_file);
+  ROS_INFO("[LTM Node]: Saved observations to file %s", obs_file);
 }
 
 void RobotLTM::SimulatePlan(const geometry_msgs::PoseArray& plan, const vector<int>& state_ids, const vector<tf::Vector3>& forces, const vector<int>& grasp_points)
