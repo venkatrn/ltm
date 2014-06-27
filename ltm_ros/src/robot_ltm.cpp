@@ -32,6 +32,7 @@ RobotLTM::RobotLTM() : ar_marker_tracking_(false)
 
   d_model_ = new DModel(reference_frame_);
   planner_ = new DModelPlanner;
+  learner_ = new DModelLearner(reference_frame_);
 
   // Initialize force primitives
   d_model_->InitForcePrimsFromFile(fprims_file_.c_str());
@@ -82,6 +83,7 @@ RobotLTM::~RobotLTM()
 {
   delete d_model_;
   delete planner_;
+  delete learner_;
 }
 
 void RobotLTM::ModelCB(const ltm_msgs::DModel& d_model)

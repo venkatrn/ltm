@@ -9,6 +9,7 @@
 
 #include <ltm/d_model.h>
 #include <ltm/d_model_planner.h>
+#include <ltm/d_model_learner.h>
 
 #include <ros/ros.h>
 #include <ltm_msgs/DModel.h>
@@ -38,6 +39,7 @@ class RobotLTM
 
     DModel* d_model_;
     DModelPlanner* planner_;
+    DModelLearner* learner_;
 
     PViz pviz_;
     tf::TransformListener tf_listener_;
