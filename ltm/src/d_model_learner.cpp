@@ -224,6 +224,7 @@ void DModelLearner::LearnPrior(const std::vector<geometry_msgs::PoseArray>& obse
   {
     end_eff_traj.poses.push_back(observations[ii].poses[grasp_idx_]);
   }
+  viz_->VisualizeTraj(end_eff_traj);
   LearnPrior(end_eff_traj);
 }
 

@@ -182,12 +182,45 @@ void LTMViz::VisualizeAxis(const geometry_msgs::Pose axis)
   marker.pose.orientation.w = axis.orientation.w;
   marker.scale.x = 0.05;
   marker.scale.y = 0.05;
-  marker.scale.z = 2.0;
+  marker.scale.z = 0.8; 
   marker.color.r = color.r;
   marker.color.g = color.g;
   marker.color.b = color.b;
   marker.color.a = color.a;
   marker.lifetime = ros::Duration(100.0);
+  PublishMarker(marker);
+  usleep(100000);
+}
+
+void LTMViz::VisualizeTraj(const geometry_msgs::PoseArray traj)
+{
+  ltm::RGBA color(0.0, 1.0, 0.0, 0.5);
+  visualization_msgs::Marker marker;
+  marker.header.frame_id = reference_frame_;
+  marker.header.stamp = ros::Time::now();
+  marker.ns = "trajectory";
+  marker.action = visualization_msgs::Marker::ADD;
+  marker.id = 0;
+  marker.type = visualization_msgs::Marker::LINE_STRIP;
+  marker.pose.position.x = 0;
+  marker.pose.position.y = 0;
+  marker.pose.position.z = 0;
+  marker.pose.orientation.x = 0;
+  marker.pose.orientation.y = 0;
+  marker.pose.orientation.z = 0;
+  marker.pose.orientation.w = 1;
+  marker.scale.x = 0.02;
+  marker.scale.y = 0.02;
+  marker.scale.z = 0.02; 
+  marker.color.r = color.r;
+  marker.color.g = color.g;
+  marker.color.b = color.b;
+  marker.color.a = color.a;
+  marker.lifetime = ros::Duration(100.0);
+  for (int ii = 0; ii < traj.poses.size(); ++ii)
+  {
+    marker.points.push_back(traj.poses[ii].position);
+  }
   PublishMarker(marker);
   usleep(100000);
 }

@@ -18,7 +18,7 @@ RobotLTM::RobotLTM() : ar_marker_tracking_(false)
 {
   ros::NodeHandle private_nh("~");
   private_nh.param("use_model_file", use_model_file_, false);
-  private_nh.param("enforce_spatial_association", enforce_spatial_association_, false);
+  private_nh.param("enforce_spatial_association", enforce_spatial_association_, true);
   private_nh.param("model_file", model_file_, string(""));
   private_nh.param("fprims_file", fprims_file_, string(""));
   private_nh.param("obs_file", obs_file_, string("observations.txt"));

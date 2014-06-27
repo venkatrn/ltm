@@ -3,29 +3,32 @@
 #include <tf/LinearMath/Vector3.h>
 #include <geometry_msgs/Pose.h>
 #include <geometry_msgs/PoseArray.h>
+#include <ros/package.h>
 
 #include "gtest/gtest.h"
 
 using namespace std;
 
-const char kTest1FixedModel[] = "/usr0/home/venkatrn/groovy_workspace/sandbox/ltm_stack/ltm/matlab/models/test1/fixed_model.mdl";
-const char kTest1PrismaticModel[] = "/usr0/home/venkatrn/groovy_workspace/sandbox/ltm_stack/ltm/matlab/models/test1/prismatic_model.mdl";
+string kTest1FixedModel = ros::package::getPath("ltm") + "/matlab/models/test1/fixed_model.mdl";
+string kTest1PrismaticModel = ros::package::getPath("ltm") + "/matlab/models/test1/prismatic_model.mdl";
 
-const char kTest1FixedSequence[] = "/usr0/home/venkatrn/groovy_workspace/sandbox/ltm_stack/ltm/matlab/test_data/test1/fixed_obs_sequence.txt";
-const char kTest1PrismaticSequence[] = "/usr0/home/venkatrn/groovy_workspace/sandbox/ltm_stack/ltm/matlab/test_data/test1/prismatic_obs_sequence.txt";
-const char kTest1SwitchingSequence[] = "/usr0/home/venkatrn/groovy_workspace/sandbox/ltm_stack/ltm/matlab/test_data/test1/switching_obs_sequence.txt";
+string kTest1FixedSequence = ros::package::getPath("ltm") + "/matlab/test_data/test1/fixed_obs_sequence.txt";
+string kTest1PrismaticSequence = ros::package::getPath("ltm") + "/matlab/test_data/test1/prismatic_obs_sequence.txt";
+string kTest1SwitchingSequence = ros::package::getPath("ltm") + "/matlab/test_data/test1/switching_obs_sequence.txt";
 
-const char kSphere20FPrims[] = "/usr0/home/venkatrn/groovy_workspace/sandbox/ltm_stack/ltm/matlab/fprims/sphere_20.fprim";
+string kSphere20FPrims = ros::package::getPath("ltm") + "/matlab/fprims/sphere_20.fprim";
 
-const char kObservationsFile[] = "/usr0/home/venkatrn/groovy_workspace/sandbox/ltm_stack/ltm_ros/data/observations.txt";
+string kObservationsFile =  ros::package::getPath("ltm_ros") + "/data/observations.txt";
 
 const string kReferenceFrame = "map";
+const int kMaxPathLength = PATH_MAX;
 
 class DModelLearnerTest : public testing::Test 
 {
   protected:
     virtual void SetUp()
     {
+      cout << kTest1FixedModel << endl;
     }
 
     /*
@@ -38,6 +41,8 @@ class DModelLearnerTest : public testing::Test
     vector<Transition> transitions;
     vector<string> candidate_models;
 
+    // Setup full paths
+
 };
 
 /*
@@ -47,11 +52,11 @@ TEST_F(DModelLearnerTest, Test1FixedModel)
       transitions.clear();
       candidate_models.clear();
 
-      candidate_models.push_back(string(kTest1FixedModel));
-      candidate_models.push_back(string(kTest1PrismaticModel));
+      candidate_models.push_back(kTest1FixedModel);
+      candidate_models.push_back(kTest1PrismaticModel);
 
       learner->InitializeCandidateModels(candidate_models, kSphere20FPrims, 2, 0.5);
-      learner->LearnTransitions(string(kTest1FixedSequence), &transitions);
+      learner->LearnTransitions(kTest1FixedSequence), &transitions;
       
       EXPECT_EQ(0, transitions.size());
 
@@ -64,11 +69,11 @@ TEST_F(DModelLearnerTest, Test1PrismaticModel)
       transitions.clear();
       candidate_models.clear();
 
-      candidate_models.push_back(string(kTest1FixedModel));
-      candidate_models.push_back(string(kTest1PrismaticModel));
+      candidate_models.push_back(kTest1FixedModel);
+      candidate_models.push_back(kTest1PrismaticModel);
 
       learner->InitializeCandidateModels(candidate_models, kSphere20FPrims, 2, 0.5);
-      learner->LearnTransitions(string(kTest1PrismaticSequence), &transitions);
+      learner->LearnTransitions(kTest1PrismaticSequence), &transitions;
       
       EXPECT_EQ(0, transitions.size());
 
@@ -81,11 +86,11 @@ TEST_F(DModelLearnerTest, Test1SwitchingModel)
       transitions.clear();
       candidate_models.clear();
 
-      candidate_models.push_back(string(kTest1FixedModel));
-      candidate_models.push_back(string(kTest1PrismaticModel));
+      candidate_models.push_back(kTest1FixedModel);
+      candidate_models.push_back(kTest1PrismaticModel);
 
       learner->InitializeCandidateModels(candidate_models, kSphere20FPrims, 2, 0.5);
-      learner->LearnTransitions(string(kTest1SwitchingSequence), &transitions);
+      learner->LearnTransitions(kTest1SwitchingSequence), &transitions;
       
       EXPECT_EQ(1, transitions.size());
 
@@ -98,8 +103,8 @@ TEST_F(DModelLearnerTest, TestObservations)
       transitions.clear();
       candidate_models.clear();
 
-      candidate_models.push_back(string(kTest1FixedModel));
-      candidate_models.push_back(string(kTest1PrismaticModel));
+      candidate_models.push_back(kTest1FixedModel);
+      candidate_models.push_back(kTest1PrismaticModel);
 
       learner->InitializeCandidateModels(candidate_models, kSphere20FPrims, 0, 0.5);
       learner->PlaybackObservations(kObservationsFile);

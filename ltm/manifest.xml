@@ -9,11 +9,12 @@
   <review status="unreviewed" notes=""/>
   <url>http://ros.org/wiki/ltm</url>
 
+  <depend package="articulation_models"/>
+  <depend package="articulation_msgs"/>
   <depend package="tf"/>
   <depend package="geometry_msgs"/>
   <depend package="visualization_msgs"/>
-  <depend package="articulation_models"/>
-  <depend package="articulation_msgs"/>
+  <depend package="roslib"/>
   
   <export>
     <cpp cflags="`pkg-config --cflags eigen3` -I${prefix}/include" 
