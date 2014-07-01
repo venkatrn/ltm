@@ -54,7 +54,7 @@ RobotLTM::RobotLTM() : ar_marker_tracking_(false)
     ROS_INFO("LTM Node: Initialized model from file\n");
   }
   // TODO: Make all the 
-  point_cloud_sub_ = nh_.subscribe (" /kinect_head/depth_registered/rgb", 1, &RobotLTM::KinectCB, this);
+  point_cloud_sub_ = nh_.subscribe ("/kinect_head/depth_registered/points_throttle", 1, &RobotLTM::KinectCB, this);
   goal_sub_ = nh_.subscribe ("goal_pose", 1, &RobotLTM::GoalCB, this);
   grasp_sub_ = nh_.subscribe ("gripper_pose", 1, &RobotLTM::GraspCB, this);
   traj_exec_sub_ = nh_.subscribe ("traj_exec", 1, &RobotLTM::TrajExecCB, this);
