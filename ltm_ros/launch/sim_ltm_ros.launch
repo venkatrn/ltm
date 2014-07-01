@@ -4,9 +4,13 @@
   <!--<include file="$(find pr2_description)/robots/upload_pr2.launch" />-->
   <!--<param name="robot_description" command="$(find xacro)/xacro.py '$(find pr2_description)/robots/pr2.urdf.xacro'" />-->
 
+  <!--Bring up th kinematics node for ltm_simple_arm_control-->
+  <include file="$(find pr2_arm_kinematics)/launch/pr2_ik_rarm_node.launch"/>
+
   <node pkg="ltm_ros" type="ltm_ros_node" name="ltm_ros" output="screen">
     <param name="use_model_file" value="true"/>
-
+    <param name="obs_file" value="$(find ltm_ros)/data/observations.txt"/> 
+    <param name="bag_file" value="$(find ltm_ros)/data/observations.bag"/> 
     <param name="model_file" value="$(find ltm)/matlab/models/door.mdl"/>
     <param name="model_offset_x" value="1.65"/>
     <param name="model_offset_y" value="0.0"/>
@@ -24,7 +28,6 @@
 
     <param name="sim_time_step" value="0.2"/> <!--1.0-->
     <param name="reference_frame" value="/base_link"/>
-    <param name="obs_file" value="observations.txt"/>
   </node>
 
   <node pkg="tf" type="static_transform_publisher" name="map_broadcaster" args="0 0 0 0 0 0 1 /base_link /map 1000" />

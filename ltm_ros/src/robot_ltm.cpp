@@ -10,6 +10,7 @@
 
 #include <pcl/kdtree/kdtree_flann.h>
 
+
 #include <algorithm>
 
 using namespace std;
@@ -22,6 +23,7 @@ RobotLTM::RobotLTM() : ar_marker_tracking_(false)
   private_nh.param("model_file", model_file_, string(""));
   private_nh.param("fprims_file", fprims_file_, string(""));
   private_nh.param("obs_file", obs_file_, string("observations.txt"));
+  private_nh.param("bag_file", bag_file_, string("observations.bag"));
   private_nh.param("reference_frame", reference_frame_, string("/map"));
   private_nh.param("sim_time_step", sim_time_step_, 0.1);
   private_nh.param("model_offset_x", model_offset_x_, 0.0);
@@ -44,13 +46,15 @@ RobotLTM::RobotLTM() : ar_marker_tracking_(false)
   // Setup subscribers
   if (!use_model_file_)
   {
-    cloud_sub_ = nh_.subscribe ("d_model_structure", 1, &RobotLTM::ModelCB, this);
+    // TODO: Setup a subscriber to get the updated d-model structure
   }
   else
   {
     SetModelFromFile(model_file_.c_str());
     ROS_INFO("LTM Node: Initialized model from file\n");
   }
+  // TODO: Make all the 
+  point_cloud_sub_ = nh_.subscribe (" /kinect_head/depth_registered/rgb", 1, &RobotLTM::KinectCB, this);
   goal_sub_ = nh_.subscribe ("goal_pose", 1, &RobotLTM::GoalCB, this);
   grasp_sub_ = nh_.subscribe ("gripper_pose", 1, &RobotLTM::GraspCB, this);
   traj_exec_sub_ = nh_.subscribe ("traj_exec", 1, &RobotLTM::TrajExecCB, this);
@@ -111,6 +115,9 @@ void RobotLTM::LearnCB(const std_msgs::Int32ConstPtr& learning_mode)
     // Reset observations and edges
     observations_.clear();
     edges_.clear();
+    // Open the rosbag file for recording data
+    ROS_INFO("[LTM Node]: Writing point cloud data to %s", bag_file_.c_str());
+    bag_.open(bag_file_, rosbag::bagmode::Write);
 
     return;
   }
@@ -119,6 +126,7 @@ void RobotLTM::LearnCB(const std_msgs::Int32ConstPtr& learning_mode)
   {
     // Stop AR Marker tracking, and pass observations to d_model
     ar_marker_tracking_ = false;
+    bag_.close();
     ROS_INFO("[LTM Node]: Finished recording %d frames", observations_.size());
     
     if (int(observations_.size()) == 0)
@@ -127,6 +135,14 @@ void RobotLTM::LearnCB(const std_msgs::Int32ConstPtr& learning_mode)
       return;
     }
     SaveObservationsToFile(obs_file_.c_str());
+
+    // For now, learn the prior and visualize immediately after recording
+    learner_->AddGraspIdx(0);
+    // Dummy force vector for visualization
+    vector<tf::Vector3> forces;
+    learner_->PlaybackObservations(observations_, forces);
+    learner_->LearnPrior(observations_);
+
 
     ComputeEdges(observations_[0]);
     ROS_INFO("LTM Node: Number of edges in model: %d", int(edges_.size()));
@@ -252,7 +268,6 @@ void RobotLTM::GoalCB(const geometry_msgs::PoseStampedConstPtr& goal_pose)
   return;
 }
 
-
 void RobotLTM::TrajExecCB(const std_msgs::Int32ConstPtr& traj_idx_ptr)
 {
   // d_model_->SimulatePlan(forces);
@@ -267,6 +282,19 @@ void RobotLTM::TrajExecCB(const std_msgs::Int32ConstPtr& traj_idx_ptr)
      usleep(10000);
      */
   return;
+}
+
+void RobotLTM::KinectCB(const sensor_msgs::PointCloud2& point_cloud)
+{
+  // Do not write to bag file if not in tracking mode
+  if (!ar_marker_tracking_)
+  {
+    return;
+  }
+  // Tranform to reference frame (not recording tf currently)
+  sensor_msgs::PointCloud2 ref_point_cloud;
+  pcl_ros::transformPointCloud(reference_frame_, point_cloud, ref_point_cloud, tf_listener_);
+  bag_.write("kinect_point_cloud", point_cloud.header.stamp, ref_point_cloud);
 }
 
 void RobotLTM::ARMarkersCB(const ar_track_alvar_msgs::AlvarMarkersConstPtr& ar_markers)
@@ -374,6 +402,8 @@ void RobotLTM::ARMarkersCB(const ar_track_alvar_msgs::AlvarMarkersConstPtr& ar_m
   d_model_->SetPoints(pose_array);
 
   observations_.push_back(pose_array);
+
+  // Grab the kinect data and other stuff needed
   //sleep(1);
   return;
 }

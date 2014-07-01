@@ -17,7 +17,10 @@
 #include <kinematics_msgs/GetKinematicSolverInfo.h>
 #include <kinematics_msgs/GetPositionIK.h>
 
+#include <pcl_ros/transforms.h>
+#include <rosbag/bag.h>
 #include <sensor_msgs/JointState.h>
+#include <sensor_msgs/PointCloud2.h>
 
 #include <ar_track_alvar_msgs/AlvarMarkers.h>
 
@@ -48,6 +51,7 @@ class RobotLTM
     std::string model_file_;
     std::string fprims_file_;
     std::string obs_file_;
+    std::string bag_file_;
     std::string reference_frame_;
     double sim_time_step_;
     double model_offset_x_, model_offset_y_, model_offset_z_;
@@ -62,12 +66,13 @@ class RobotLTM
     bool ar_marker_tracking_;
     std::vector<geometry_msgs::PoseArray> observations_;
     std::vector<Edge> edges_;
+    rosbag::Bag bag_;
 
     ros::ServiceClient query_client_;
     ros::ServiceClient ik_client_;
 
     // Subscribers
-    ros::Subscriber cloud_sub_;
+    ros::Subscriber point_cloud_sub_;
     ros::Subscriber goal_sub_;
     ros::Subscriber grasp_sub_;
     ros::Subscriber traj_exec_sub_;
@@ -91,6 +96,8 @@ class RobotLTM
     void LearnCB(const std_msgs::Int32ConstPtr& learning_mode);
     /**@ brief Recieve and store AR marker poses**/
     void ARMarkersCB(const ar_track_alvar_msgs::AlvarMarkersConstPtr& ar_markers);
+    /**@brief This is temporary--will go away once the API for recording and stopping rosbags is ready**/
+    void KinectCB(const sensor_msgs::PointCloud2& point_cloud);
 
     /**@brief Method to initialize DModel from file**/
     void SetModelFromFile(const char* model_file);

@@ -15,6 +15,7 @@
   <!--Bring up the ltm_ros node-->
   <node pkg="ltm_ros" type="ltm_ros_node" name="ltm_ros" output="screen">
     <param name="obs_file" value="$(find ltm_ros)/data/observations.txt"/> 
+    <param name="bag_file" value="$(find ltm_ros)/data/observations.bag"/> 
     <param name="use_model_file" value="false"/>
     <param name="fprims_file" value="$(find ltm)/matlab/fprims/circle_40.fprim"/>
     <param name="sim_time_step" value="0.2"/> <!--1.0-->

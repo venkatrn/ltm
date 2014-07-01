@@ -189,7 +189,6 @@ void LTMViz::VisualizeAxis(const geometry_msgs::Pose axis)
   marker.color.a = color.a;
   marker.lifetime = ros::Duration(100.0);
   PublishMarker(marker);
-  usleep(100000);
 }
 
 void LTMViz::VisualizeTraj(const geometry_msgs::PoseArray traj)
@@ -222,12 +221,12 @@ void LTMViz::VisualizeTraj(const geometry_msgs::PoseArray traj)
     marker.points.push_back(traj.poses[ii].position);
   }
   PublishMarker(marker);
-  usleep(100000);
 }
 
 void LTMViz::PublishMarker(visualization_msgs::Marker& marker)
 {
   marker_publisher_.publish(marker);
+  usleep(10000);
 }
 
 void LTMViz::PublishMarkerArray(visualization_msgs::MarkerArray& marker_array)
