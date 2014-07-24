@@ -12,10 +12,13 @@
       <param name="use_model_file" value="true"/>
       <param name="obs_file" value="$(find ltm_ros)/data/observations.txt"/> 
       <param name="bag_file" value="$(find ltm_ros)/data/observations.bag"/> 
-      <param name="model_file" value="$(find ltm)/matlab/models/door.mdl"/>
-      <param name="model_offset_x" value="1.65"/>
-      <param name="model_offset_y" value="0.0"/>
-      <param name="model_offset_z" value="1.0"/>
+
+      <!-- This is only for dmodel_bank-->
+      <rosparam param="model_files" subst_value="True">[$(find ltm)/matlab/models/door.mdl]</rosparam>
+      <rosparam param="model_offsets_x">[1.65]</rosparam>
+      <rosparam param="model_offsets_y">[0.0]</rosparam>
+      <rosparam param="model_offsets_z">[1.0]</rosparam>
+
       <param name="fprims_file" value="$(find ltm)/matlab/fprims/circle_40.fprim"/>
 
       <!--
