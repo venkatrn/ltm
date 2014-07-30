@@ -18,61 +18,47 @@ using namespace std;
 using namespace articulation_models;
 using namespace articulation_msgs;
 
-DModelLearner::DModelLearner(const string& reference_frame)
+DModelLearner::DModelLearner(const string& reference_frame, int num_hypotheses)
 {
-  num_hypotheses_ = 0;
+  num_hypotheses_ = num_hypotheses;
   grasp_idx_ = -1;
   reference_frame_ = reference_frame;
   viz_ = new LTMViz("d_model_viz");
   viz_->SetReferenceFrame(reference_frame_);
+  candidate_model_bank_ = new DModelBank(reference_frame_, num_hypotheses_);
 }
 
 DModelLearner::~DModelLearner()
 {
-  for (int ii = 0; ii < num_hypotheses_; ++ii)
+  if (candidate_model_bank_ != nullptr)
   {
-    if (candidate_models_[ii] != NULL)
-    {
-      delete candidate_models_[ii];
-    }
+    delete candidate_model_bank_;
   }
-  candidate_models_.clear();
 }
 
-void DModelLearner::InitializeCandidateModels(const std::vector<std::string> dmodel_files, const std::string fprims_file, int grasp_idx, double del_t)
+void DModelLearner::InitializeCandidateModels(const vector<string> dmodel_files, const string fprims_file, int grasp_idx, double del_t)
 {
-  // Models should be initialized before any of the other methods are called
-  InitializeCandidateModels(dmodel_files);
+  assert(candidate_model_bank_ != nullptr);
+  candidate_model_bank_->InitFromFile(dmodel_files);
   InitializeForcePrimsFromFile(fprims_file);
   AddGraspIdx(grasp_idx);
   SetSimTimeStep(del_t);
 }
 
-void DModelLearner::InitializeCandidateModels(const vector<std::string> dmodel_files)
+void DModelLearner::InitializeForcePrimsFromFile(const string fprims_file)
 {
-  num_hypotheses_ = int(dmodel_files.size());
-  for (int ii = 0; ii < num_hypotheses_; ++ii)
-  {
-    candidate_models_.push_back(new DModel("/base_link"));
-    candidate_models_[ii]->InitFromFile(dmodel_files[ii].c_str());
-  }
-}
-
-void DModelLearner::InitializeForcePrimsFromFile(const std::string fprims_file)
-{
-  for (int ii = 0; ii < num_hypotheses_; ++ii)
-  {
-    candidate_models_[ii]->InitForcePrimsFromFile(fprims_file.c_str());
-  }
+  candidate_model_bank_->InitForcePrimsFromFile(fprims_file.c_str());
 }
 
 void DModelLearner::AddGraspIdx(int grasp_idx)
 {
+  candidate_model_bank_->AddGraspIdx(grasp_idx);
   grasp_idx_ = grasp_idx;
 }
 
 void DModelLearner::SetSimTimeStep(double del_t)
 {
+  candidate_model_bank_->SetSimTimeStep(del_t);
   del_t_ = del_t;
 }
 
@@ -86,13 +72,12 @@ void DModelLearner::PlaybackObservations(const std::string obs_file)
 
 void DModelLearner::PlaybackObservations(const std::vector<geometry_msgs::PoseArray>& observations, const std::vector<tf::Vector3>& forces)
 {
-  assert(grasp_idx_ != -1);
   const int num_observations = observations.size();
   if (num_observations <= 1)
   {
     return;
   }
-  const bool forces_available = (observations.size() == forces.size() + 1);
+  const bool forces_available = (observations.size() == (forces.size() + 1)) && (grasp_idx_ != -1);
   for (int ii = 0; ii < num_observations - 1; ++ii)
   {
     viz_->VisualizePoints(observations[ii]);
@@ -153,7 +138,7 @@ void DModelLearner::LearnTransitions(const vector<geometry_msgs::PoseArray>& obs
     for (int jj = 0; jj < num_hypotheses_; ++jj)
     {
       geometry_msgs::PoseArray simulated_points;
-      candidate_models_[jj]->GetNextState(observations[ii], grasp_idx_, forces[ii], del_t_, &simulated_points);
+      candidate_model_bank_->GetNextState(jj, observations[ii], grasp_idx_, forces[ii], del_t_, &simulated_points);
       model_errors[jj] = ComputeSquaredError(observations[ii + 1], simulated_points);
       ROS_DEBUG("Model %d, error: %f\n", jj, model_errors[jj]);
       max_error = max(model_errors[jj], max_error);

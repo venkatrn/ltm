@@ -9,7 +9,7 @@
 
 #include <ltm/d_model_bank.h>
 #include <ltm/lao_planner.h>
-//#include <ltm/d_model_learner.h>
+#include <ltm/d_model_learner.h>
 
 #include <ros/ros.h>
 #include <ltm_msgs/DModel.h>
@@ -44,7 +44,7 @@ class LAORobotLTM
 
     DModelBank* d_model_bank_;
     LAOPlanner* planner_;
-    //DModelLearner* learner_;
+    DModelLearner* learner_;
 
     PViz pviz_;
     tf::TransformListener tf_listener_;
@@ -64,7 +64,8 @@ class LAORobotLTM
     int grasp_idx_;
     std::vector<int> grasp_idxs_;
     geometry_msgs::Pose grasp_pose_;
-    State_t goal_state_;
+    State_t start_state_, goal_state_;
+    int num_goals_received_; // Keep track of number of goals received--must match number of grasp poses.
 
     // Tracking points/ar markers
     bool ar_marker_tracking_;
@@ -85,8 +86,6 @@ class LAORobotLTM
  
     // Publishers
     ros::Publisher plan_pub_;
-    // TODO: This is only for mannequin
-    ros::Publisher mannequin_pub_;
 
     // Callbacks
     void GraspCB(const geometry_msgs::PoseStampedConstPtr& grasp_pose);
@@ -94,9 +93,17 @@ class LAORobotLTM
     * of the end effector
     */
     void GoalCB(const geometry_msgs::PoseStampedConstPtr& goal_pose);
-    void TrajExecCB(const std_msgs::Int32ConstPtr& traj_idx);
+    /**@brief Helper for GoalCB. Note: goal_state must be set outside of this method**/
+    void PlanAndExecute();
+    void GetExecutionTraj(const std::vector<int>& state_ids, const std::vector<int>& fprim_ids, geometry_msgs::PoseArray* execution_traj);
+    void GetStartBelief(std::vector<double>* belief);
+    void UpdateStartState();
+
+    /** CB triggered when part of trajectory has been executed--depending on completion status, we will
+     * replan and execute, or declare success**/
+    void TrajExecCB(const std_msgs::Int32ConstPtr& exec_mode_ptr);
     /**@brief Callback to trigger and end learning phase**/
-    //void LearnCB(const std_msgs::Int32ConstPtr& learning_mode);
+    void LearnCB(const std_msgs::Int32ConstPtr& learning_mode);
     /**@ brief Recieve and store AR marker poses**/
     void ARMarkersCB(const ar_track_alvar_msgs::AlvarMarkersConstPtr& ar_markers);
     /**@brief This is temporary--will go away once the API for recording and stopping rosbags is ready**/
@@ -108,8 +115,8 @@ class LAORobotLTM
     /**@brief Save the observations to file**/
     void SaveObservationsToFile(const char* obs_file);
 
-    /**@brief Simulate plan, with the PR2 robot**/
-    void SimulatePlan(const geometry_msgs::PoseArray& plan, const std::vector<int>& state_ids, const std::vector<tf::Vector3>& forces, const std::vector<int>& grasp_points);
+    /**@brief Simulate plan, with the PR2 robot--this is just a visualization of the states in the path**/
+    void SimulatePlan(int model_id, const geometry_msgs::PoseArray& plan, const std::vector<int>& state_ids, const std::vector<tf::Vector3>& forces, const std::vector<int>& grasp_points);
 
     /**@brief Get inverse kinematics for the PR2 right arm**/
     bool GetRightIK(const std::vector<double>& ik_pose, const std::vector<double>& seed, std::vector<double>* angles);

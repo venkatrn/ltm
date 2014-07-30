@@ -34,7 +34,7 @@ RobotLTM::RobotLTM() : ar_marker_tracking_(false)
 
   d_model_ = new DModel(reference_frame_);
   planner_ = new DModelPlanner;
-  learner_ = new DModelLearner(reference_frame_);
+  learner_ = new DModelLearner(reference_frame_); //Initialize with 1 candidate model
 
   // Initialize force primitives
   d_model_->InitForcePrimsFromFile(fprims_file_.c_str());
@@ -137,7 +137,7 @@ void RobotLTM::LearnCB(const std_msgs::Int32ConstPtr& learning_mode)
     SaveObservationsToFile(obs_file_.c_str());
 
     // For now, learn the prior and visualize immediately after recording
-    learner_->AddGraspIdx(0);
+    // learner_->AddGraspIdx(0); //This is deprecated--grasp_idx must be set when initializing the candidate models
     // Dummy force vector for visualization
     vector<tf::Vector3> forces;
     learner_->PlaybackObservations(observations_, forces);

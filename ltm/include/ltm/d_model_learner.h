@@ -6,8 +6,7 @@
 #ifndef _LTM_DMODEL_LEARNER_H_
 #define _LTM_DMODEL_LEARNER_H_
 
-#include <ltm/abstract_model.h>
-#include <ltm/d_model.h>
+#include <ltm/d_model_bank.h>
 #include <ltm/d_model_utils.h>
 #include <ltm/ltm_viz.h>
 
@@ -25,14 +24,13 @@ class DModelLearner
 {
   public:
     /**@brief Constructor **/
-    explicit DModelLearner(const std::string& reference_frame);
+    explicit DModelLearner(const std::string& reference_frame, int num_hypotheses);
 
     /**@brief Destructor **/
     ~DModelLearner();
 
     /**@brief Initialize candidate models from files**/
     void InitializeCandidateModels(const std::vector<std::string> dmodel_files, const std::string fprims_file, int grasp_idx, double del_t);
-    void InitializeCandidateModels(const std::vector<std::string> dmodel_files);
 
     /**@brief Initialize the force primitives **/
     void InitializeForcePrimsFromFile(const std::string fprims_file);
@@ -63,12 +61,12 @@ class DModelLearner
 
   private:
     int num_hypotheses_; ///< Number of candidate models 
+    int grasp_idx_; ///< Allow grasp_idx to vary for observations
     double del_t_; ///< Timestep for forward simulation of candidate models 
-    int grasp_idx_; // TODO: This should be allowed to vary for each observation-action pair
     std::string reference_frame_;
     LTMViz* viz_;
-    /// Candidate D-models. These are 'static' models--their edge parameters do not change.
-    std::vector<DModel*> candidate_models_;
+    /// Candidate D-models (DModelBank)
+    DModelBank* candidate_model_bank_;
     /// Compute squared error between two point clouds
     double ComputeSquaredError(const geometry_msgs::PoseArray pts1, const geometry_msgs::PoseArray pts2);
 

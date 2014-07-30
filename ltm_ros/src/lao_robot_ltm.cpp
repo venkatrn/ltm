@@ -15,7 +15,8 @@
 
 using namespace std;
 
-LAORobotLTM::LAORobotLTM() : ar_marker_tracking_(false)
+LAORobotLTM::LAORobotLTM() : num_goals_received_(0),
+                             ar_marker_tracking_(false)
 {
   ros::NodeHandle private_nh("~");
   private_nh.param("use_model_file", use_model_file_, false);
@@ -39,14 +40,14 @@ LAORobotLTM::LAORobotLTM() : ar_marker_tracking_(false)
 
   d_model_bank_ = new DModelBank(reference_frame_, num_models_);
   planner_ = new LAOPlanner;
-  //learner_ = new DModelLearner(reference_frame_);
+  learner_ = new DModelLearner(reference_frame_, num_models_);
 
-  // Initialize force primitives
+  // Initialize force primitives and other dmodel_bank_ parameters
   d_model_bank_->InitForcePrimsFromFile(fprims_file_.c_str());
+  d_model_bank_->SetSimTimeStep(sim_time_step_);
 
   // Setup publsihers
   plan_pub_ = nh_.advertise<geometry_msgs::PoseArray>("ltm_plan", 1);
-  mannequin_pub_ = nh_.advertise<sensor_msgs::JointState>("/robot2/mannequin_joints", 1000, true);
 
   // Setup subscribers
   if (!use_model_file_)
@@ -62,7 +63,7 @@ LAORobotLTM::LAORobotLTM() : ar_marker_tracking_(false)
   point_cloud_sub_ = nh_.subscribe ("/kinect_head/depth_registered/points_throttle", 1, &LAORobotLTM::KinectCB, this);
   goal_sub_ = nh_.subscribe ("goal_pose", 1, &LAORobotLTM::GoalCB, this);
   grasp_sub_ = nh_.subscribe ("gripper_pose", 1, &LAORobotLTM::GraspCB, this);
-  traj_exec_sub_ = nh_.subscribe ("traj_exec", 1, &LAORobotLTM::TrajExecCB, this);
+  traj_exec_sub_ = nh_.subscribe ("traj_exec_mode", 1, &LAORobotLTM::TrajExecCB, this);
   //learning_mode_sub_ = nh_.subscribe ("learning_mode", 1, &LAORobotLTM::LearnCB, this);
   ar_marker_sub_ = nh_.subscribe("ar_pose_marker", 1, &LAORobotLTM::ARMarkersCB, this);
 
@@ -73,28 +74,15 @@ LAORobotLTM::LAORobotLTM() : ar_marker_tracking_(false)
   query_client_ = nh_.serviceClient<kinematics_msgs::GetKinematicSolverInfo>("pr2_right_arm_kinematics/get_ik_solver_info");
   ik_client_ = nh_.serviceClient<kinematics_msgs::GetPositionIK>("pr2_right_arm_kinematics/get_ik");
 
-  /*
-  for (int ii = 0; ii < 1000; ++ii) {
-  sensor_msgs::JointState joints_msg;
-  joints_msg.header.stamp = ros::Time::now();
-  joints_msg.name.push_back(string("LShoulderYaw"));
-  joints_msg.position.push_back(0.0); //1.07
-  joints_msg.velocity.push_back(0.0);
-  joints_msg.effort.push_back(0.0);
-  mannequin_pub_.publish(joints_msg);
-  usleep(10000);
-  }
-  */
-
 }
 
 LAORobotLTM::~LAORobotLTM() 
 {
   delete d_model_bank_;
   delete planner_;
-  //delete learner_;
+  delete learner_;
 }
-/*
+
 void LAORobotLTM::LearnCB(const std_msgs::Int32ConstPtr& learning_mode)
 {
   // Learning modes: 0-Learning not yet started, 1-Learning in progress, 2-Learning is complete
@@ -133,12 +121,11 @@ void LAORobotLTM::LearnCB(const std_msgs::Int32ConstPtr& learning_mode)
     SaveObservationsToFile(obs_file_.c_str());
 
     // For now, learn the prior and visualize immediately after recording
-    learner_->AddGraspIdx(0);
+    // learner_->AddGraspIdx(0); //Deprecated--cannot add grasp idx before initializing models
     // Dummy force vector for visualization
     vector<tf::Vector3> forces;
     learner_->PlaybackObservations(observations_, forces);
     learner_->LearnPrior(observations_);
-
 
     ComputeEdges(observations_[0]);
     ROS_INFO("LTM Node: Number of edges in model: %d", int(edges_.size()));
@@ -147,7 +134,6 @@ void LAORobotLTM::LearnCB(const std_msgs::Int32ConstPtr& learning_mode)
     return;
   }
 }
-*/
 
 void LAORobotLTM::GraspCB(const geometry_msgs::PoseStampedConstPtr& grasp_pose)
 {
@@ -169,8 +155,7 @@ void LAORobotLTM::GraspCB(const geometry_msgs::PoseStampedConstPtr& grasp_pose)
 
 void LAORobotLTM::GoalCB(const geometry_msgs::PoseStampedConstPtr& goal_pose)
 {
-  static int goal_num = 0;
-  ROS_INFO("LTM Node: Received goal %d", goal_num);
+  ROS_INFO("LTM Node: Received goal %d", num_goals_received_);
 
   // Transform goal pose to reference frame
   geometry_msgs::PoseStamped goal_pose_ref_frame;
@@ -178,51 +163,85 @@ void LAORobotLTM::GoalCB(const geometry_msgs::PoseStampedConstPtr& goal_pose)
   tf_listener_.transformPose(reference_frame_, *goal_pose, goal_pose_ref_frame);
 
   // Set goal
-  if (grasp_idxs_.size() == 0 || goal_num >= grasp_idxs_.size())
+  if (grasp_idxs_.size() == 0 || num_goals_received_ >= grasp_idxs_.size())
   {
     ROS_INFO("LTM Node: Grasp points have not been set, or invalid goal num\n");
   }
 
-  goal_state_.changed_inds.push_back(grasp_idxs_[goal_num]);
+  goal_state_.changed_inds.push_back(grasp_idxs_[num_goals_received_]);
   goal_state_.changed_points.poses.push_back(goal_pose_ref_frame.pose);
   ROS_INFO("LTM Node: New goal received: %f %f %f\n",
       goal_pose_ref_frame.pose.position.x, goal_pose_ref_frame.pose.position.y,
       goal_pose_ref_frame.pose.position.z);
 
   // Wait until number of goal states is the same as number of grasp points
-  if (goal_num != grasp_idxs_.size() - 1)
+  if (num_goals_received_ != grasp_idxs_.size() - 1)
   {
-    goal_num++;
+    num_goals_received_++;
     return;
   }
 
+  UpdateStartState();
 
-  //TODO: Fake a start state for now. Should be set elsewhere
-  State_t start_state;
-  start_state.grasp_idx = grasp_idxs_[0];
-  d_model_bank_->SetInternalStartState(start_state);
-  BeliefState_t start_belief_state;
-  start_belief_state.internal_state_id = d_model_bank_->GetInternalStartStateID();
-  start_belief_state.belief.clear();
-  // Uniform prior
-  start_belief_state.belief.resize(num_models_, 1/num_models_);
-  d_model_bank_->SetStartState(start_belief_state);
-
-  d_model_bank_->SetSimTimeStep(sim_time_step_);
-
-  d_model_bank_->SetInternalGoalState(goal_state_);
   //TODO: Not setting belief goal state for now, since it depends on internal goal state
+  //Note: Make sure to recompute goal state changed points when the start state changes
+  d_model_bank_->SetInternalGoalState(goal_state_);
 
+  PlanAndExecute();
+
+  return;
+}
+
+void LAORobotLTM::PlanAndExecute()
+{
   // Plan
-  planner_->SetStart(d_model_bank_->GetStartStateID());
   vector<int> state_ids, fprim_ids;
+  planner_->SetStart(d_model_bank_->GetStartStateID());
   if (!planner_->Plan(&state_ids, &fprim_ids))
   {
-    printf("LTM Node: Failed to plan\n");
+    printf("[LTM Node]: Failed to plan\n");
     return;
   }
-  return;
+  // Print planner stats
+  PlannerStats planner_stats = planner_->GetPlannerStats();
+  ROS_INFO("Planner Stats:\nNum Expansions: %d, Planning Time: %f, Start State Value: %d\n",
+      planner_stats.expansions, planner_stats.time, planner_stats.cost);
 
+  // Convert state ids to end-effector trajectory
+  geometry_msgs::PoseArray traj;
+  GetExecutionTraj(state_ids, fprim_ids, &traj);
+
+  // Publish end-effector trajectory
+  plan_pub_.publish(traj);
+}
+
+void LAORobotLTM::UpdateStartState()
+{
+  // Don't update the environment's start unless the grasp points have been set
+  if (grasp_idxs_.size() == 0)
+  {
+    return;
+  }
+  start_state_.grasp_idx = grasp_idxs_[0];
+  d_model_bank_->SetInternalStartState(start_state_);
+
+  BeliefState_t start_belief_state;
+  start_belief_state.internal_state_id = d_model_bank_->GetInternalStartStateID();
+  // Set model belief. TODO: Use DModelLearner to update model probabilities based on observed data
+  GetStartBelief(&start_belief_state.belief);
+  d_model_bank_->SetStartState(start_belief_state);
+  return;
+}
+
+void LAORobotLTM::GetStartBelief(vector<double>* belief)
+{
+  belief->clear();
+  belief->resize(num_models_, 1.0/static_cast<double>(num_models_));
+  return;
+}
+
+void LAORobotLTM::GetExecutionTraj(const vector<int>& state_ids, const vector<int>& fprim_ids, geometry_msgs::PoseArray* traj)
+{
   // Get forces from fprim_ids
   vector<tf::Vector3> forces;
   vector<int> grasp_points;
@@ -231,61 +250,60 @@ void LAORobotLTM::GoalCB(const geometry_msgs::PoseStampedConstPtr& goal_pose)
   d_model_bank_->ConvertForcePrimIDsToForcePrims(fprim_ids, &forces, &grasp_points);
 
   /*
-  printf("Force Sequence:\n");
-  for (size_t ii = 0; ii < forces.size(); ++ii)
-  {
-    printf("%f %f %f\n", forces[ii].x(), forces[ii].y(), forces[ii].z());
-  }
-  printf("\n");
-  */
+     printf("Force Sequence:\n");
+     for (size_t ii = 0; ii < forces.size(); ++ii)
+     {
+     printf("%f %f %f\n", forces[ii].x(), forces[ii].y(), forces[ii].z());
+     }
+     printf("\n");
+     */
 
-  // Print planner stats
-  PlannerStats planner_stats = planner_->GetPlannerStats();
-  ROS_INFO("Planner Stats:\nNum Expansions: %d, Planning Time: %f, Solution Cost: %d\n",
-      planner_stats.expansions, planner_stats.time, planner_stats.cost);
-
-
-  // Publish plan
-  geometry_msgs::PoseArray traj;
-  d_model_bank_->GetEndEffectorTrajFromStateIDs(state_ids, &traj);
-
-
-  plan_pub_.publish(traj);
+  d_model_bank_->GetEndEffectorTrajFromStateIDs(state_ids, traj);
 
   // Simulate plan 
   // d_model_->SimulatePlan(fprim_ids);
-  SimulatePlan(traj, state_ids, forces, grasp_points);
+  // TODO: Hardcoded model id for visualization--doesn't matter since the actual model is not used for
+  // visualization
+  SimulatePlan(0, *traj, state_ids, forces, grasp_points);
+  // TODO: Currently faking execution
+  // std_msgs::Int32Ptr exec_mode_ptr(new std_msgs::Int32);
+  // exec_mode_ptr->data = 1;
+  // TrajExecCB(exec_mode_ptr);
 
   //Print end effector trajectory
   printf("End-Effector Trajectory:\n");
-  for (size_t ii = 0; ii < traj.poses.size(); ++ii)
+  for (size_t ii = 0; ii < (*traj).poses.size(); ++ii)
   {
-    printf("%f %f %f %f %f %f %f\n", traj.poses[ii].position.x, traj.poses[ii].position.y, traj.poses[ii].position.z,
-        traj.poses[ii].orientation.x, traj.poses[ii].orientation.y, traj.poses[ii].orientation.z, traj.poses[ii].orientation.w);
+    ROS_INFO("%f %f %f %f %f %f %f", (*traj).poses[ii].position.x, (*traj).poses[ii].position.y, (*traj).poses[ii].position.z,
+        (*traj).poses[ii].orientation.x, (*traj).poses[ii].orientation.y, (*traj).poses[ii].orientation.z, (*traj).poses[ii].orientation.w);
   }
-  printf("\n");
 
-  // Reset goal state
-  goal_num = 0;
-  goal_state_.changed_inds.clear();
-  goal_state_.changed_points.poses.clear();
-
-  return;
+  return; 
 }
 
-void LAORobotLTM::TrajExecCB(const std_msgs::Int32ConstPtr& traj_idx_ptr)
+void LAORobotLTM::TrajExecCB(const std_msgs::Int32ConstPtr& exec_mode_ptr)
 {
-  // d_model_->SimulatePlan(forces);
-  /*
-     int traj_idx = static_cast<int>(traj_idx_ptr->data) - 1;
-     if (traj_idx >= int(forces.size()))
-     {
-     ROS_INFO("LTM Node: Trajectory index exceeds limits. Error simulating path.\n");
-     }
-     ROS_INFO("LTM Node: Simulating trajectory index %d\n", traj_idx);
-     d_model_->ApplyForce(grasp_idx_, forces[traj_idx], sim_time_step_);
-     usleep(10000);
-     */
+  int exec_mode = static_cast<int>(exec_mode_ptr->data);
+  // TODO: Check if actual goal has been reached
+  if (exec_mode == 1)
+  {
+    // Success--reset goal state to be ready for next goal request
+    ROS_INFO("[LTM Node]: Task completed successfully, ready for new goal request");
+    num_goals_received_ = 0;
+    goal_state_.changed_inds.clear();
+    goal_state_.changed_points.poses.clear();
+  }
+  else
+  {
+    // Replan and execute
+    ROS_INFO("[LTM Node]: Partial trajectory executed, replanning to goal");
+    UpdateStartState();
+
+    //TODO: Not setting belief goal state for now, since it depends on internal goal state
+    //Note: Make sure to recompute goal state changed points when the start state changes
+    d_model_bank_->SetInternalGoalState(goal_state_);
+    PlanAndExecute();
+  }
   return;
 }
 
@@ -452,7 +470,7 @@ void LAORobotLTM::SaveObservationsToFile(const char* obs_file)
   ROS_INFO("[LTM Node]: Saved observations to file %s", obs_file);
 }
 
-void LAORobotLTM::SimulatePlan(const geometry_msgs::PoseArray& plan, const vector<int>& state_ids, const vector<tf::Vector3>& forces, const vector<int>& grasp_points)
+void LAORobotLTM::SimulatePlan(int model_id, const geometry_msgs::PoseArray& plan, const vector<int>& state_ids, const vector<tf::Vector3>& forces, const vector<int>& grasp_points)
 {
   // TODO: Check that plan and forces are of equal length
   printf("Num States: %d, Num Forces: %d\n", state_ids.size(), forces.size());
@@ -497,17 +515,10 @@ void LAORobotLTM::SimulatePlan(const geometry_msgs::PoseArray& plan, const vecto
     pose[0] = plan.poses[ii].position.x - standoff;
     pose[1] = plan.poses[ii].position.y;
     pose[2] = plan.poses[ii].position.z;
-    // TODO: Mannequin hack
-    /*
     pose[3] = plan.poses[ii].orientation.w;
     pose[4] = plan.poses[ii].orientation.x;
     pose[5] = plan.poses[ii].orientation.y;
     pose[6] = plan.poses[ii].orientation.z;
-    */
-    pose[3] = 1.0;
-    pose[4] = 0.0;
-    pose[5] = 0.0;
-    pose[6] = 0.0;
 
     if (GetRightIK(pose, seed, &r_angles))
     {
@@ -531,7 +542,7 @@ void LAORobotLTM::SimulatePlan(const geometry_msgs::PoseArray& plan, const vecto
     
     // Draw the model at next timestep
     // d_model_->ApplyForce(grasp_idx_, forces[ii], sim_time_step_);
-    d_model_bank_->VisualizeState(state_ids[ii]);
+    d_model_bank_->VisualizeState(model_id, state_ids[ii]);
     
     //seed.swap(r_angles);
     usleep(100000);
@@ -539,7 +550,7 @@ void LAORobotLTM::SimulatePlan(const geometry_msgs::PoseArray& plan, const vecto
 
   // Visualize the initial state after running through simulation
   sleep(2);
-  d_model_bank_->VisualizeState(state_ids[0]);
+  d_model_bank_->VisualizeState(model_id, state_ids[0]);
   /*
   pviz_.visualizeRobot(initial_r_angles,
       l_angles,

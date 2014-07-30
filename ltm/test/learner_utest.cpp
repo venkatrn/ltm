@@ -45,18 +45,17 @@ class DModelLearnerTest : public testing::Test
 
 };
 
-/*
 TEST_F(DModelLearnerTest, Test1FixedModel)
 {
-      learner = new DModelLearner(kReferenceFrame);
       transitions.clear();
       candidate_models.clear();
 
       candidate_models.push_back(kTest1FixedModel);
       candidate_models.push_back(kTest1PrismaticModel);
 
+      learner = new DModelLearner(kReferenceFrame, candidate_models.size());
       learner->InitializeCandidateModels(candidate_models, kSphere20FPrims, 2, 0.5);
-      learner->LearnTransitions(kTest1FixedSequence), &transitions;
+      learner->LearnTransitions(kTest1FixedSequence, &transitions);
       
       EXPECT_EQ(0, transitions.size());
 
@@ -65,15 +64,15 @@ TEST_F(DModelLearnerTest, Test1FixedModel)
 
 TEST_F(DModelLearnerTest, Test1PrismaticModel)
 {
-      learner = new DModelLearner(kReferenceFrame);
       transitions.clear();
       candidate_models.clear();
 
       candidate_models.push_back(kTest1FixedModel);
       candidate_models.push_back(kTest1PrismaticModel);
 
+      learner = new DModelLearner(kReferenceFrame, candidate_models.size());
       learner->InitializeCandidateModels(candidate_models, kSphere20FPrims, 2, 0.5);
-      learner->LearnTransitions(kTest1PrismaticSequence), &transitions;
+      learner->LearnTransitions(kTest1PrismaticSequence, &transitions);
       
       EXPECT_EQ(0, transitions.size());
 
@@ -82,21 +81,21 @@ TEST_F(DModelLearnerTest, Test1PrismaticModel)
 
 TEST_F(DModelLearnerTest, Test1SwitchingModel)
 {
-      learner = new DModelLearner(kReferenceFrame);
       transitions.clear();
       candidate_models.clear();
 
       candidate_models.push_back(kTest1FixedModel);
       candidate_models.push_back(kTest1PrismaticModel);
 
+      learner = new DModelLearner(kReferenceFrame, candidate_models.size());
       learner->InitializeCandidateModels(candidate_models, kSphere20FPrims, 2, 0.5);
-      learner->LearnTransitions(kTest1SwitchingSequence), &transitions;
+      learner->LearnTransitions(kTest1SwitchingSequence, &transitions);
       
       EXPECT_EQ(1, transitions.size());
 
       delete learner;
 }
-*/
+/*
 TEST_F(DModelLearnerTest, TestObservations)
 {
       learner = new DModelLearner(kReferenceFrame);
@@ -112,7 +111,7 @@ TEST_F(DModelLearnerTest, TestObservations)
 
       delete learner;
 }
-
+*/
 int main(int argc, char **argv){
   testing::InitGoogleTest(&argc, argv);
   ros::init(argc, argv, "ltm_learner_test");

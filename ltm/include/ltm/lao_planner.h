@@ -96,11 +96,14 @@ class LAOPlanner
     // Planner takes passive ownership of the model (does not delete it when going out of scope)
     AbstractModelBank* model_bank_;
     int start_state_id_;
+    //TODO: remove this
     int goal_state_id_;
     PlannerStats planner_stats_;
 
     /**@brief Return a postorder DFS traversal (state ids) of the best solution graph**/
     void DFSTraversal(std::vector<int>* traversal);
+    /**@brief Reconstruct optimistic path (actions lead to successor with smallest V-value**/
+    void ReconstructOptimisticPath(std::vector<int>* state_ids, std::vector<int>* fprim_ids);
 
     /**@brief Planner hash table**/
     std::unordered_map<int, PlannerState> PlannerStateMap;

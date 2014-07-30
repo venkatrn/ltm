@@ -7,17 +7,41 @@
   <!--Bring up th kinematics node for ltm_simple_arm_control-->
   <include file="$(find pr2_arm_kinematics)/launch/pr2_ik_rarm_node.launch"/>
 
-  <!--<node pkg="ltm_ros" type="ltm_ros_node" name="ltm_ros" output="screen" launch-prefix="gdb -ex run -(extra dash)args">-->
+  <!--<node pkg="ltm_ros" type="ltm_ros_node" name="ltm_ros" output="screen" launch-prefix="gdb -ex run -args">-->
     <node pkg="ltm_ros" type="ltm_ros_node" name="ltm_ros" output="screen">
       <param name="use_model_file" value="true"/>
       <param name="obs_file" value="$(find ltm_ros)/data/observations.txt"/> 
       <param name="bag_file" value="$(find ltm_ros)/data/observations.bag"/> 
 
       <!-- This is only for dmodel_bank-->
-      <rosparam param="model_files" subst_value="True">[$(find ltm)/matlab/models/door.mdl]</rosparam>
-      <rosparam param="model_offsets_x">[1.65]</rosparam>
-      <rosparam param="model_offsets_y">[0.0]</rosparam>
-      <rosparam param="model_offsets_z">[1.0]</rosparam>
+      <!--
+      <rosparam param="model_files" subst_value="True">
+        [$(find ltm)/matlab/models/door.mdl]
+      </rosparam>
+      <rosparam param="model_offsets_x">
+        [1.65]
+      </rosparam>
+      <rosparam param="model_offsets_y">
+        [0.0]
+      </rosparam>
+      <rosparam param="model_offsets_z">
+        [1.0]
+      </rosparam>
+      -->
+
+      <rosparam param="model_files" subst_value="True">
+        [$(find ltm)/matlab/models/door.mdl,
+        $(find ltm)/matlab/models/door_rigid.mdl]
+      </rosparam>
+      <rosparam param="model_offsets_x">
+        [1.65,1.65]
+      </rosparam>
+      <rosparam param="model_offsets_y">
+        [0.0,0.0]
+      </rosparam>
+      <rosparam param="model_offsets_z">
+        [1.0,1.0]
+      </rosparam>
 
       <param name="fprims_file" value="$(find ltm)/matlab/fprims/circle_40.fprim"/>
 

@@ -40,6 +40,7 @@ ros::ServiceClient ik_client;
 ros::Publisher goal_pub;
 ros::Publisher gripper_pub;
 ros::Publisher learning_mode_pub;
+ros::Publisher traj_exec_mode_pub;
 
 ros::Subscriber plan_sub;
 bool execute_trajectory = false;
@@ -233,6 +234,7 @@ void CloseGripper()
 
 void planCB(const geometry_msgs::PoseArrayConstPtr& plan)
 {
+  bool safe_execution = false;
   // Do nothin if execute trajectory is not on
   if (!execute_trajectory)
   {
@@ -280,7 +282,7 @@ void planCB(const geometry_msgs::PoseArrayConstPtr& plan)
   if(getRightIK(pose, seed, angles)){
     moveArmTo(angles);
   }
-  else
+  else if (safe_execution)
   {
     return;
   }
@@ -325,6 +327,11 @@ void planCB(const geometry_msgs::PoseArrayConstPtr& plan)
   
   // Open the gripper after executing trajectory
   OpenGripper();
+  
+  // Publish end of execution message
+  std_msgs::Int32 traj_exec_mode;
+  traj_exec_mode.data = 1;
+  traj_exec_mode_pub.publish(traj_exec_mode);
 
   return;
 }
@@ -738,6 +745,7 @@ int main(int argc, char** argv)
   goal_pub = n.advertise<geometry_msgs::PoseStamped>("goal_pose", 1);
   gripper_pub = n.advertise<geometry_msgs::PoseStamped>("gripper_pose", 1);
   learning_mode_pub = n.advertise<std_msgs::Int32>("learning_mode", 1);
+  traj_exec_mode_pub = n.advertise<std_msgs::Int32>("traj_exec_mode", 1);
 
   plan_sub = n.subscribe("ltm_plan", 1, &planCB);
   

@@ -154,9 +154,8 @@ class DModelBank : public AbstractModelBank
     void SimulatePlan(int model_id, const std::vector<tf::Vector3>& forces, const std::vector<int>& grasp_points);
     void SimulatePlan(int model_id, const std::vector<int>& fprim_ids); 
 
-    /**@brief Visualize a state**/
-    void VisualizeState(int model_id, int state_id);
-
+    /**@brief Visualize belief state**/
+    void VisualizeState(int model_id, int belief_state_id);
 
     /**@brief Debug utilities**/
     void PrintPoints();
@@ -212,7 +211,8 @@ class DModelBank : public AbstractModelBank
     int num_models_;
     /**@brief Mapping from (i,j) to edge(i,j)**/
     std::vector<EdgeMap*> edge_maps_;
-    std::vector<std::vector<int>> adj_list_;
+    /**@brief Adjacency list, one for each model**/
+    std::vector<std::vector<std::vector<int>>> adj_lists_;
 
     /**@brief Mapping from State to State ID**/
     std::unordered_map<int, State_t> StateMap;
@@ -247,7 +247,7 @@ class DModelBank : public AbstractModelBank
         tf::Vector3* normal);
 
     /**@brief Return a set of successors for a given point*/
-    void GetAdjPoints(int p_idx, std::vector<int>* adj_points);
+    void GetAdjPoints(int model_id, int p_idx, std::vector<int>* adj_points);
 
     /**@brief State to State ID mapping**/
     int StateToStateID(State_t& s);
@@ -280,6 +280,9 @@ class DModelBank : public AbstractModelBank
     /**@brief Return heuristic for a state**/
     double GetGoalHeuristic(int belief_state_id);
     double GetInternalGoalHeuristic(int internal_state_id);
+
+    /**@brief Visualize internal state**/
+    void VisualizeInternalState(int model_id, int internal_state_id);
 
     DISALLOW_COPY_AND_ASSIGN(DModelBank);
 };

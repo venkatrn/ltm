@@ -24,6 +24,7 @@ DModelBank::DModelBank(const string& reference_frame, int num_models)
 {
   reference_frame_ = reference_frame;
   num_models_ = num_models;
+  adj_lists_.resize(num_models);
   for (int ii = 0; ii < num_models; ++ii)
   {
     EdgeMap* edge_map = new unordered_map<Edge, EdgeParams, pair_hash>();
@@ -229,15 +230,15 @@ void DModelBank::AddEdge(int model_id, Edge e, EdgeParams e_params)
 {
   assert(model_id < int(edge_maps_.size()));
   EdgeMap* edge_map = edge_maps_[model_id];
-  if (adj_list_.size() == 0)
+  if (adj_lists_[model_id].size() == 0)
   {
-    adj_list_.resize(points_.poses.size());
+    adj_lists_[model_id].resize(points_.poses.size());
   }
   // TODO: Do this in a smarter way?
-  if (find(adj_list_[e.first].begin(), adj_list_[e.first].end(), e.second) == adj_list_[e.first].end())
+  if (find(adj_lists_[model_id][e.first].begin(), adj_lists_[model_id][e.first].end(), e.second) == adj_lists_[model_id][e.first].end())
   {
-    adj_list_[e.first].push_back(e.second);
-    adj_list_[e.second].push_back(e.first);
+    adj_lists_[model_id][e.first].push_back(e.second);
+    adj_lists_[model_id][e.second].push_back(e.first);
     //printf("Size of edge map: %d\n",edge_map->size());
     (*edge_map)[e] = e_params;
     // By default, assume that the reverse connection is of the same type, unless otherwise provided
@@ -282,13 +283,13 @@ void DModelBank::AddGraspPoint(geometry_msgs::Pose p)
     }
   }
   int num_points = int(points_.poses.size());
-  adj_list_.resize(num_points + 1);
   Edge e = make_pair(num_points, closest_p_idx);
   EdgeParams e_params(RIGID, tf::Vector3(0.0, 0.0, 0.0), 1.0);
   AddPoint(p);
   // Add edge in all models
   for (int ii = 0; ii < num_models_; ++ii)
   {
+    adj_lists_[ii].resize(num_points + 1);
     AddEdge(ii, e, e_params);
   }
   AddGraspIdx(num_points);
@@ -369,7 +370,7 @@ void DModelBank::ExtractIndices(int model_id, int p_idx, vector<int>* component_
     component_idxs->push_back(idx);
 
     vector<int> adj_points;
-    GetAdjPoints(idx, &adj_points);
+    GetAdjPoints(model_id, idx, &adj_points);
     for (size_t ii = 0; ii < adj_points.size(); ++ii) 
     {
       // Skip if the successor is already in open list or closed list
@@ -402,12 +403,12 @@ void DModelBank::ExtractIndices(int model_id, int p_idx, vector<int>* component_
   return;
 }
 
-void DModelBank::GetAdjPoints(int p_idx, std::vector<int> *adj_points)
+void DModelBank::GetAdjPoints(int model_id, int p_idx, std::vector<int> *adj_points)
 {
   adj_points->clear();
-  for (size_t ii = 0; ii < adj_list_[p_idx].size(); ++ii)
+  for (size_t ii = 0; ii < adj_lists_[model_id][p_idx].size(); ++ii)
   {
-    adj_points->push_back(adj_list_[p_idx][ii]);
+    adj_points->push_back(adj_lists_[model_id][p_idx][ii]);
   }
   return;
 }
@@ -692,11 +693,19 @@ void DModelBank::SimulatePlan(int model_id, const vector<tf::Vector3>& forces, c
   return;
 }
 
-void DModelBank::VisualizeState(int model_id, int state_id)
+void DModelBank::VisualizeState(int model_id, int belief_state_id)
+{
+  // TODO: Create lookup between belief state id and internal state id
+  BeliefState_t belief_state = BeliefStateIDToState(belief_state_id);
+  int internal_state_id = belief_state.internal_state_id;
+  VisualizeInternalState(model_id, internal_state_id);
+}
+
+void DModelBank::VisualizeInternalState(int model_id, int internal_state_id)
 {
   assert(model_id < edge_maps_.size());
 
-  State_t s = StateIDToState(state_id);
+  State_t s = StateIDToState(internal_state_id);
   geometry_msgs::PoseArray points;
   for (size_t ii = 0; ii < points_.poses.size(); ++ii)
   {
@@ -714,9 +723,23 @@ void DModelBank::VisualizeState(int model_id, int state_id)
       points.poses.push_back(points_.poses[ii]);
     }
   }
-  viz_->VisualizeModel(*(edge_maps_[model_id]), points);
-  // TODO: remove this
-  //TFCallback(points);
+  //TODO: harcoded colors for now
+  ltm::RGBA edge_color, point_color;
+  ltm::RGBA model1_edge(1.0, 0.0, 0.0, 1.0);
+  ltm::RGBA model1_point(0.0, 0.0, 1.0, 1.0);
+  ltm::RGBA model2_edge(0.0, 0.0, 1.0, 1.0);
+  ltm::RGBA model2_point(1.0, 0.0, 0.0, 1.0);
+  switch(model_id)
+  {
+    case 0:
+      edge_color = model1_edge;
+      point_color = model1_point;
+      break;
+    default:
+      edge_color = model2_edge;
+      point_color = model2_point;
+  }
+  viz_->VisualizeModel(*(edge_maps_[model_id]), points, edge_color, point_color);
   return;
 }
 
@@ -814,6 +837,11 @@ void DModelBank::GetSuccs(int source_state_id,
   unordered_map<int, double> costs_map; //(fp_id, cost)
   for (int ii = 0; ii < num_models_; ++ii)
   {
+    // Do not return a successor if model probability is negligible
+    if (source_belief_state.belief[ii] < kFPTolerance)
+    {
+      continue;
+    }
     vector<int> succs;
     vector<int> edge_ids;
     vector<double> costs;
@@ -822,7 +850,7 @@ void DModelBank::GetSuccs(int source_state_id,
     { 
       BeliefState_t s;
       s.internal_state_id = succs[jj];
-      s.belief.resize(num_models_);
+      s.belief.resize(num_models_, 0.0);
       // TODO: Incorporate noisy observation model
       s.belief[ii] = 1;
       int belief_state_id = BeliefStateToStateID(s);
@@ -863,8 +891,8 @@ void DModelBank::GetSuccs(int model_id, int source_state_id, vector<int>* succs,
 
   if (visualize_expansions_)
   {
-    VisualizeState(model_id, source_state_id);
-    usleep(1000);
+    VisualizeInternalState(model_id, source_state_id);
+    usleep(1000);//1000
   }
 
   State_t source_state = StateIDToState(source_state_id);
@@ -979,7 +1007,7 @@ double DModelBank::GetGoalHeuristic(int belief_state_id)
 {
   BeliefState_t s = BeliefStateIDToState(belief_state_id);
   int internal_state_id = s.internal_state_id;
-  return GetInternalGoalHeuristic(internal_state_id);
+  return 10*GetInternalGoalHeuristic(internal_state_id);
 }
 
 double DModelBank::GetInternalGoalHeuristic(int internal_state_id)
@@ -1046,6 +1074,11 @@ void DModelBank::AddGraspIdx(int grasp_idx)
 void DModelBank::SetStartState(BeliefState_t start_state)
 {
   int start_state_id = BeliefStateToStateID(start_state);
+  if (start_state_id == env_cfg_.start_state_id)
+  {
+    ROS_DEBUG("DModelBank: Start belief state to be set is same as previous start belief state"); 
+    return;
+  }
   ROS_INFO("DModelBank: Setting start state: %d\n", start_state_id);
   env_cfg_.start_state_id = start_state_id;
   return; 
@@ -1054,6 +1087,11 @@ void DModelBank::SetStartState(BeliefState_t start_state)
 void DModelBank::SetInternalStartState(State_t start_state)
 {
   int start_state_id = StateToStateID(start_state);
+  if (start_state_id == env_cfg_.internal_start_state_id)
+  {
+    ROS_DEBUG("DModelBank: Start state to be set is same as previous start state"); 
+    return;
+  }
   ROS_INFO("DModelBank: Setting internal start state: %d\n", start_state_id);
   env_cfg_.internal_start_state_id = start_state_id;
   return; 
@@ -1069,7 +1107,17 @@ void DModelBank::SetGoalState(BeliefState_t goal_state)
 
 void DModelBank::SetInternalGoalState(State_t goal_state)
 {
+  //Note: Goal state must be set after start state always
+  if (env_cfg_.internal_start_state_id == -1)
+  {
+    ROS_ERROR("[DModelBank: Cannot set goal state before start state has been set");
+  }
   int goal_state_id = StateToStateID(goal_state);
+  if (goal_state_id == env_cfg_.internal_goal_state_id)
+  {
+    ROS_DEBUG("DModelBank: Goal state to be set is same as previous goal state"); 
+    return;
+  }
   ROS_INFO("DModelBank: Setting internal goal state: %d\n",goal_state_id);
   env_cfg_.internal_goal_state_id = goal_state_id;
   for (size_t ii = 0; ii < goal_state.changed_inds.size(); ++ii)
@@ -1126,7 +1174,9 @@ bool DModelBank::GetEndEffectorTrajFromStateIDs(const std::vector<int>& state_id
   traj->poses.clear();
   for (size_t ii = 0; ii < state_ids.size(); ++ii)
   {
-    State_t s = StateIDToState(state_ids[ii]);
+    BeliefState_t belief_state = BeliefStateIDToState(state_ids[ii]);
+    int internal_state_id = belief_state.internal_state_id;
+    State_t s = StateIDToState(internal_state_id);
     auto it = std::find(s.changed_inds.begin(), s.changed_inds.end(), s.grasp_idx);
     if (it != s.changed_inds.end())
     {

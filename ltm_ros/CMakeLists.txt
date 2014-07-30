@@ -23,7 +23,7 @@ set(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
 #rosbuild_gensrv()
 
 #common commands for building c++ executables and libraries
-rosbuild_add_library(${PROJECT_NAME} src/robot_ltm.cpp)
+#rosbuild_add_library(${PROJECT_NAME} src/robot_ltm.cpp) # Cannot build this until d_model, d_model_bank conflict is resolved
 rosbuild_add_library(${PROJECT_NAME} src/lao_robot_ltm.cpp)
 #target_link_libraries(${PROJECT_NAME} another_library)
 #rosbuild_add_boost_directories()
