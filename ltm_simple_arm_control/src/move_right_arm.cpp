@@ -238,6 +238,10 @@ void planCB(const geometry_msgs::PoseArrayConstPtr& plan)
   // Do nothin if execute trajectory is not on
   if (!execute_trajectory)
   {
+    // Fake publish end of execution message
+    std_msgs::Int32 traj_exec_mode;
+    traj_exec_mode.data = 1;
+    traj_exec_mode_pub.publish(traj_exec_mode);
     return;
   }
   // Reset execute trajectory to false

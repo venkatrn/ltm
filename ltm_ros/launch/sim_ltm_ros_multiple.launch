@@ -43,7 +43,8 @@
         [1.0,1.0]
       </rosparam>
 
-      <param name="fprims_file" value="$(find ltm)/matlab/fprims/circle_40.fprim"/>
+      <param name="fprims_file" value="$(find ltm)/matlab/fprims/sphere_20.fprim"/>
+      <!--<param name="fprims_file" value="$(find ltm)/matlab/fprims/circle_40.fprim"/>-->
 
       <!--
     <param name="model_file" value="$(find ltm)/matlab/models/drawer_small.mdl"/>

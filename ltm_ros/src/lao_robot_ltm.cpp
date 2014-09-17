@@ -39,7 +39,7 @@ LAORobotLTM::LAORobotLTM() : num_goals_received_(0),
   grasp_idxs_.clear();
 
   d_model_bank_ = new DModelBank(reference_frame_, num_models_);
-  planner_ = new LAOPlanner;
+  planner_ = new LAOPlanner();
   learner_ = new DModelLearner(reference_frame_, num_models_);
 
   // Initialize force primitives and other dmodel_bank_ parameters
@@ -64,7 +64,7 @@ LAORobotLTM::LAORobotLTM() : num_goals_received_(0),
   goal_sub_ = nh_.subscribe ("goal_pose", 1, &LAORobotLTM::GoalCB, this);
   grasp_sub_ = nh_.subscribe ("gripper_pose", 1, &LAORobotLTM::GraspCB, this);
   traj_exec_sub_ = nh_.subscribe ("traj_exec_mode", 1, &LAORobotLTM::TrajExecCB, this);
-  //learning_mode_sub_ = nh_.subscribe ("learning_mode", 1, &LAORobotLTM::LearnCB, this);
+  learning_mode_sub_ = nh_.subscribe ("learning_mode", 1, &LAORobotLTM::LearnCB, this);
   ar_marker_sub_ = nh_.subscribe("ar_pose_marker", 1, &LAORobotLTM::ARMarkersCB, this);
 
   // Setup model and planner.
