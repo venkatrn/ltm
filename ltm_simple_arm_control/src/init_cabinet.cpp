@@ -62,7 +62,6 @@ int main(int argc, char** argv){
     r_arm.sendArmToConfiguration(&r_init[0],3);
     l_arm.sendArmToConfiguration(&l_init[0],3);
 
-    /*
     PointHeadClient* point_head_client_;
     std::string point_head_srv("/head_traj_controller/point_head_action");
     point_head_client_ = new PointHeadClient(point_head_srv, true);
@@ -71,6 +70,6 @@ int main(int argc, char** argv){
     while(!point_head_client_->waitForServer(ros::Duration(5.0))){
         ROS_INFO("Waiting for the point_head_action server to come up");
     }
-    lookAt("base_link", 0.820, 0.095, 1.047, point_head_client_);
-    */
+    //lookAt("base_link", 0.820, 0.095, 1.047, point_head_client_);
+    lookAt("base_link", 0.5, -0.1, 1.15, point_head_client_);
 }
