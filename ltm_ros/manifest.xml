@@ -18,7 +18,6 @@
   <depend package="roscpp"/>
   <depend package="rosbag"/>
   <depend package="sensor_msgs"/>
-  <depend package="sensor_msgs"/>
 
 </package>
 

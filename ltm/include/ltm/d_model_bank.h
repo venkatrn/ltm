@@ -123,7 +123,7 @@ class DModelBank : public AbstractModelBank
 {
   public:
     /**@brief Constructor**/
-    explicit DModelBank(const std::string& reference_frame, int num_models);
+    explicit DModelBank(const std::string& reference_frame);
     // TODO: This constructor is deprecated until I get the gcc 4.7 compiler to work
     DModelBank();
 
@@ -137,6 +137,10 @@ class DModelBank : public AbstractModelBank
      **/
     void InitFromFile(std::vector<std::string> dmodel_files, std::vector<double> shift_x, std::vector<double> shift_y, std::vector<double> shift_z);
     void InitFromFile(std::vector<std::string> dmodel_files);
+    /**@brief Initialize the D-ModelBank directly from edges and edge params (typically computed by a learner from
+     * AR marker trackings)
+     **/
+    void InitFromObs(std::vector<Edge> edges, std::vector<std::vector<EdgeParams>> edge_params);
 
     /**@brief Read the force primitives from file.**/
     void InitForcePrimsFromFile(const char* fprims_file);
@@ -205,6 +209,12 @@ class DModelBank : public AbstractModelBank
     /**@brief Reset the state mappings**/
     void ResetStateMap();
 
+    /**@brief Accessors**/
+    int num_models() const {return num_models_;}
+    double sim_time_step() const {return env_cfg_.sim_time_step;}
+    // TODO: this is arbitrary
+    int grasp_idx() const {return (grasp_idxs_.size() == 0) ? -1 : grasp_idxs_[0];}
+
   private:
     std::string reference_frame_;
     geometry_msgs::PoseArray points_;
@@ -232,6 +242,9 @@ class DModelBank : public AbstractModelBank
     std::vector<tf::Vector3> force_primitives_;
     // Point index at which forces can be applied. 
     std::vector<int> grasp_idxs_;
+
+    /**@brief Initialization helpers**/
+    void InitEdgeMap(int num_models);
 
     /**@brief InitFromFile helpers**/
     void InitFromFile(int model_id, const char* dmodel_file, double shift_x, double shift_y, double shift_z);

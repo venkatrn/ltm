@@ -24,22 +24,13 @@ class DModelLearner
 {
   public:
     /**@brief Constructor **/
-    explicit DModelLearner(const std::string& reference_frame, int num_hypotheses);
+    explicit DModelLearner(const std::string& reference_frame);
 
     /**@brief Destructor **/
     ~DModelLearner();
 
-    /**@brief Initialize candidate models from files**/
-    void InitializeCandidateModels(const std::vector<std::string> dmodel_files, const std::string fprims_file, int grasp_idx, double del_t);
-
-    /**@brief Initialize the force primitives **/
-    void InitializeForcePrimsFromFile(const std::string fprims_file);
-
-    /**@brief Set the grasp index for the candidate models**/
+    void SetModelBank(DModelBank* const model_bank);
     void AddGraspIdx(int grasp_idx);
-
-    /**@brief Set the timestep for quasi-static simulation used in computing successors**/
-    void SetSimTimeStep(double del_t);
 
     /**@brief Learn the transitions from one static model to another
      * @param[in] observations Observed points 
@@ -58,6 +49,9 @@ class DModelLearner
     void LearnPrior(const std::string obs_file);
     void LearnPrior(const std::vector<geometry_msgs::PoseArray>& observations);
     void LearnPrior(const geometry_msgs::PoseArray& end_eff_traj);
+
+    /**@brief Compute edges for a point cloud**/
+    void ComputeEdges(const geometry_msgs::PoseArray& points, std::vector<Edge>* edges);
 
   private:
     int num_hypotheses_; ///< Number of candidate models 

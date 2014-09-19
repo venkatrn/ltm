@@ -23,8 +23,6 @@ LAORobotLTM::LAORobotLTM() : num_goals_received_(0),
   private_nh.param("enforce_spatial_association", enforce_spatial_association_, true);
   vector<string> empty_model_files;
   private_nh.param("model_files", model_files_, empty_model_files);
-  num_models_ = model_files_.size();
-  ROS_INFO("[LAO Robot LTM]: Number of models in bank: %d", num_models_);
   private_nh.param("fprims_file", fprims_file_, string(""));
   private_nh.param("obs_file", obs_file_, string("observations.txt"));
   private_nh.param("bag_file", bag_file_, string("observations.bag"));
@@ -38,13 +36,13 @@ LAORobotLTM::LAORobotLTM() : num_goals_received_(0),
 
   grasp_idxs_.clear();
 
-  d_model_bank_ = new DModelBank(reference_frame_, num_models_);
+  d_model_bank_ = new DModelBank(reference_frame_);
   planner_ = new LAOPlanner();
-  learner_ = new DModelLearner(reference_frame_, num_models_);
-
+  learner_ = new DModelLearner(reference_frame_);
   // Initialize force primitives and other dmodel_bank_ parameters
   d_model_bank_->InitForcePrimsFromFile(fprims_file_.c_str());
   d_model_bank_->SetSimTimeStep(sim_time_step_);
+  planner_->SetModelBank(d_model_bank_);
 
   // Setup publsihers
   plan_pub_ = nh_.advertise<geometry_msgs::PoseArray>("ltm_plan", 1);
@@ -56,8 +54,11 @@ LAORobotLTM::LAORobotLTM() : num_goals_received_(0),
   }
   else
   {
-    SetModelBankFromFile(model_files_);
+    num_models_ = model_files_.size();
+    ROS_INFO("[LAO Robot LTM]: Number of models in bank: %d", num_models_);
+    d_model_bank_->InitFromFile(model_files_, model_offsets_x_, model_offsets_y_, model_offsets_z_); 
     ROS_INFO("LTM Node: Initialized model from file\n");
+    // Setup planner.
   }
   // TODO: Make all the 
   point_cloud_sub_ = nh_.subscribe ("/kinect_head/depth_registered/points_throttle", 1, &LAORobotLTM::KinectCB, this);
@@ -67,13 +68,9 @@ LAORobotLTM::LAORobotLTM() : num_goals_received_(0),
   learning_mode_sub_ = nh_.subscribe ("learning_mode", 1, &LAORobotLTM::LearnCB, this);
   ar_marker_sub_ = nh_.subscribe("ar_pose_marker", 1, &LAORobotLTM::ARMarkersCB, this);
 
-  // Setup model and planner.
-  planner_->SetModelBank(d_model_bank_);
-
   // Initialize IK clients
   query_client_ = nh_.serviceClient<kinematics_msgs::GetKinematicSolverInfo>("pr2_right_arm_kinematics/get_ik_solver_info");
   ik_client_ = nh_.serviceClient<kinematics_msgs::GetPositionIK>("pr2_right_arm_kinematics/get_ik");
-
 }
 
 LAORobotLTM::~LAORobotLTM() 
@@ -98,7 +95,6 @@ void LAORobotLTM::LearnCB(const std_msgs::Int32ConstPtr& learning_mode)
     ar_marker_tracking_ = true;
     // Reset observations and edges
     observations_.clear();
-    edges_.clear();
     // Open the rosbag file for recording data
     ROS_INFO("[LTM Node]: Writing point cloud data to %s", bag_file_.c_str());
     bag_.open(bag_file_, rosbag::bagmode::Write);
@@ -123,15 +119,34 @@ void LAORobotLTM::LearnCB(const std_msgs::Int32ConstPtr& learning_mode)
     // For now, learn the prior and visualize immediately after recording
     // learner_->AddGraspIdx(0); //Deprecated--cannot add grasp idx before initializing models
     // Dummy force vector for visualization
+    /*
     vector<tf::Vector3> forces;
     learner_->PlaybackObservations(observations_, forces);
     learner_->LearnPrior(observations_);
+    */
+    vector<Edge> edges;
+    learner_->ComputeEdges(observations_[0], &edges);
+    ROS_INFO("LTM Node: Number of edges in model: %d", int(edges.size()));
+    vector<vector<EdgeParams>> edge_params;
+    edge_params.resize(1);
+    for (int jj = 0; jj < edge_params.size(); ++jj)
+    {
+      for (int ii = 0; ii < edges.size(); ++ii)
+      {
+        EdgeParams e_params;
+        e_params.joint = RIGID;
+        e_params.normal = tf::Vector3(1.0, 1.0, 1.0);
+        e_params.rad = 1.0;
+        edge_params[jj].push_back(e_params);
+      }
+    }
+    d_model_bank_->InitFromObs(edges, edge_params); 
+    ROS_INFO("LTM Node: Initialized model from live observation\n");
 
-    ComputeEdges(observations_[0]);
-    ROS_INFO("LTM Node: Number of edges in model: %d", int(edges_.size()));
+    return;
+
     // TODO: Not using the old learning method currently
     // d_model_->LearnDModelParameters(observations_, edges_);
-    return;
   }
 }
 
@@ -357,13 +372,6 @@ void LAORobotLTM::ARMarkersCB(const ar_track_alvar_msgs::AlvarMarkersConstPtr& a
       return;
     }
   }
-  /*
-  vector<int> id_mappings;
-  for (int ii =0; ii < num_markers; ++ii)
-  {
-    id_mappings.push_back(ar_markers->markers[ii].id);
-  }
-  */
 
   // Update the d_model state
   geometry_msgs::PoseArray temp_pose_array, pose_array;
@@ -378,9 +386,6 @@ void LAORobotLTM::ARMarkersCB(const ar_track_alvar_msgs::AlvarMarkersConstPtr& a
     geometry_msgs::PoseStamped grasp_pose_ref_frame;
     tf_listener_.waitForTransform(ar_markers->markers[ii].header.frame_id, reference_frame_, ros::Time::now(), ros::Duration(3.0));
     tf_listener_.transformPose(reference_frame_, ar_marker_pose, grasp_pose_ref_frame);
-    //auto id_map_it = find(id_mappings.begin(), id_mappings.end(), ar_markers->markers[ii].id);
-    //int mapped_id = distance(id_mappings.begin(), id_map_it);
-    // pose_array.poses[mapped_id] = grasp_pose_ref_frame.pose;
     temp_pose_array.poses.push_back(grasp_pose_ref_frame.pose);
   }
 
@@ -431,17 +436,12 @@ void LAORobotLTM::ARMarkersCB(const ar_track_alvar_msgs::AlvarMarkersConstPtr& a
   return;
 }
 
+/*
 void LAORobotLTM::SetModelBankFromFile(vector<string> model_files)
 {
     d_model_bank_->InitFromFile(model_files, model_offsets_x_, model_offsets_y_, model_offsets_z_); 
-  /*
-  // Set start
-  State_t start_state;
-  start_state.grasp_idx = 0;
-  d_model_->SetStartState(start_state);
-  */
 }
-
+*/
 void LAORobotLTM::SaveObservationsToFile(const char* obs_file)
 {
 
@@ -633,52 +633,3 @@ bool LAORobotLTM::GetRightIK(const vector<double>& ik_pose, const vector<double>
   return false;
 }
 
-
-
-void LAORobotLTM::ComputeEdges(const geometry_msgs::PoseArray& pose_array)
-{
-  // Clear existing edges
-  edges_.clear();
-
-  const double kKNNSearchRadius = 0.5;
-  const int kKNNSearchK = 2;
-  
-  const size_t num_points = pose_array.poses.size();
-
-  // Create point cloud for first frame.
-  pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
-  cloud->width = num_points;
-  cloud->height = 1;
-  cloud->points.resize(cloud->width * cloud->height);
-  for (size_t ii = 0; ii < num_points; ++ii)
-  {
-    cloud->points[ii].x = pose_array.poses[ii].position.x;
-    cloud->points[ii].y = pose_array.poses[ii].position.y;
-    cloud->points[ii].z = pose_array.poses[ii].position.z;
-  }
-
-  // Get nearest neighbors for each tracked point, in the first frame.
-  pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
-  kdtree.setInputCloud (cloud);
-
-  for (size_t ii = 0; ii < num_points; ++ii)
-  {
-    vector<int> idxs;
-    vector<float> sqr_distances;
-    kdtree.radiusSearch(cloud->points[ii], kKNNSearchRadius, idxs, sqr_distances);
-    // kdtree.nearestKSearch(cloud->points[ii], kKNNSearchK, idxs, distances);
-    for (size_t jj = 0; jj < idxs.size(); ++jj)
-    {
-      // TODO: Do distance checking if using knn search instead of radius search.
-      // No self loops
-      if (ii == idxs[jj])
-      {
-        continue;
-      }
-      edges_.push_back(make_pair(ii, idxs[jj]));
-    }
-  }
-  return;
-  
-  return;
-}

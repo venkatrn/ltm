@@ -9,6 +9,8 @@
 #include <cassert>
 #include <string>
 
+#include <pcl/kdtree/kdtree_flann.h>
+
 #include <articulation_models/models/factory.h>
 #include <articulation_msgs/ModelMsg.h>
 #include <articulation_msgs/TrackMsg.h>
@@ -18,48 +20,30 @@ using namespace std;
 using namespace articulation_models;
 using namespace articulation_msgs;
 
-DModelLearner::DModelLearner(const string& reference_frame, int num_hypotheses)
+DModelLearner::DModelLearner(const string& reference_frame)
 {
-  num_hypotheses_ = num_hypotheses;
+  num_hypotheses_ = 0;
   grasp_idx_ = -1;
   reference_frame_ = reference_frame;
   viz_ = new LTMViz("d_model_viz");
   viz_->SetReferenceFrame(reference_frame_);
-  candidate_model_bank_ = new DModelBank(reference_frame_, num_hypotheses_);
 }
 
 DModelLearner::~DModelLearner()
 {
-  if (candidate_model_bank_ != nullptr)
-  {
-    delete candidate_model_bank_;
-  }
+  // DModelLearner does not own the model_bank
 }
 
-void DModelLearner::InitializeCandidateModels(const vector<string> dmodel_files, const string fprims_file, int grasp_idx, double del_t)
+void DModelLearner::SetModelBank(DModelBank* const model_bank)
 {
-  assert(candidate_model_bank_ != nullptr);
-  candidate_model_bank_->InitFromFile(dmodel_files);
-  InitializeForcePrimsFromFile(fprims_file);
-  AddGraspIdx(grasp_idx);
-  SetSimTimeStep(del_t);
-}
-
-void DModelLearner::InitializeForcePrimsFromFile(const string fprims_file)
-{
-  candidate_model_bank_->InitForcePrimsFromFile(fprims_file.c_str());
+  candidate_model_bank_ = model_bank;
+  num_hypotheses_ = model_bank->num_models();
+  del_t_ = model_bank->sim_time_step();
 }
 
 void DModelLearner::AddGraspIdx(int grasp_idx)
 {
-  candidate_model_bank_->AddGraspIdx(grasp_idx);
   grasp_idx_ = grasp_idx;
-}
-
-void DModelLearner::SetSimTimeStep(double del_t)
-{
-  candidate_model_bank_->SetSimTimeStep(del_t);
-  del_t_ = del_t;
 }
 
 void DModelLearner::PlaybackObservations(const std::string obs_file)
@@ -367,4 +351,50 @@ void DModelLearner::ReadObservationsFromFile(const string obs_file, vector<geome
     forces->push_back(force);
   } 
   fclose(f_obs);
+}
+
+void DModelLearner::ComputeEdges(const geometry_msgs::PoseArray& pose_array, vector<Edge>* edges)
+{
+  // Clear existing edges
+  edges->clear();
+
+  const double kKNNSearchRadius = 0.5;
+  const int kKNNSearchK = 2;
+  
+  const size_t num_points = pose_array.poses.size();
+
+  // Create point cloud for first frame.
+  pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
+  cloud->width = num_points;
+  cloud->height = 1;
+  cloud->points.resize(cloud->width * cloud->height);
+  for (size_t ii = 0; ii < num_points; ++ii)
+  {
+    cloud->points[ii].x = pose_array.poses[ii].position.x;
+    cloud->points[ii].y = pose_array.poses[ii].position.y;
+    cloud->points[ii].z = pose_array.poses[ii].position.z;
+  }
+
+  // Get nearest neighbors for each tracked point, in the first frame.
+  pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;
+  kdtree.setInputCloud (cloud);
+
+  for (size_t ii = 0; ii < num_points; ++ii)
+  {
+    vector<int> idxs;
+    vector<float> sqr_distances;
+    kdtree.radiusSearch(cloud->points[ii], kKNNSearchRadius, idxs, sqr_distances);
+    // kdtree.nearestKSearch(cloud->points[ii], kKNNSearchK, idxs, distances);
+    for (size_t jj = 0; jj < idxs.size(); ++jj)
+    {
+      // TODO: Do distance checking if using knn search instead of radius search.
+      // No self loops
+      if (ii == idxs[jj])
+      {
+        continue;
+      }
+      edges->push_back(make_pair(ii, idxs[jj]));
+    }
+  }
+  return;
 }

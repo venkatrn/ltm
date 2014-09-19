@@ -20,16 +20,10 @@ const double kGoalTolerance = 0.25; //0.05, 0.01 for experiments
 
 using namespace std;
 
-DModelBank::DModelBank(const string& reference_frame, int num_models)
+DModelBank::DModelBank(const string& reference_frame)
 {
   reference_frame_ = reference_frame;
-  num_models_ = num_models;
-  adj_lists_.resize(num_models);
-  for (int ii = 0; ii < num_models; ++ii)
-  {
-    EdgeMap* edge_map = new unordered_map<Edge, EdgeParams, pair_hash>();
-    edge_maps_.push_back(edge_map);
-  }
+  num_models_ = 0;
 
   viz_ = new LTMViz("d_model_viz");
   viz_->SetReferenceFrame(reference_frame);
@@ -59,19 +53,47 @@ DModelBank::~DModelBank()
   }
 }
 
-void DModelBank::InitFromFile(vector<string> dmodel_files)
+void DModelBank::InitEdgeMap(int num_models)
 {
-  assert(num_models_ = int(dmodel_files.size()));
+  assert(num_models_ == 0);
+  num_models_ = num_models;
+  adj_lists_.resize(num_models_);
   for (int ii = 0; ii < num_models_; ++ii)
   {
-    InitFromFile(ii, dmodel_files[ii].c_str(), 0.0, 0.0, 0.0);
+    EdgeMap* edge_map = new unordered_map<Edge, EdgeParams, pair_hash>();
+    edge_maps_.push_back(edge_map);
   }
+}
+
+void DModelBank::InitFromObs(vector<Edge> edges, vector<vector<EdgeParams>> edge_params)
+{
+  InitEdgeMap(edge_params.size());
+  // Assume points have been set before through SetPoints
+  for (int jj = 0; jj < num_models_; ++jj)
+  {
+    // Edges must be added only after all points have been added.
+    for (int ii = 0; ii < edges.size(); ++ii)
+    {
+      AddEdge(jj, edges[ii], edge_params[jj][ii]);
+    } 
+  }
+}
+
+
+void DModelBank::InitFromFile(vector<string> dmodel_files)
+{
+  const int num_models = dmodel_files.size();
+  vector<double> empty_shifts;
+  empty_shifts.resize(num_models, 0.0);
+  InitFromFile(dmodel_files, empty_shifts, empty_shifts, empty_shifts);
   return;
 }
 
 void DModelBank::InitFromFile(vector<string> dmodel_files, std::vector<double> shifts_x, std::vector<double> shifts_y, std::vector<double> shifts_z)
 {
-  assert(num_models_ = int(dmodel_files.size()));
+  InitEdgeMap(dmodel_files.size());
+
+  // Read models
   for (int ii = 0; ii < num_models_; ++ii)
   {
     ROS_DEBUG("Loading model file: %s", dmodel_files[ii].c_str());

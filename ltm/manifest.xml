@@ -13,6 +13,7 @@
   <depend package="articulation_msgs"/>
   <depend package="tf"/>
   <depend package="geometry_msgs"/>
+  <depend package="pcl_ros"/>
   <depend package="visualization_msgs"/>
   <depend package="roslib"/>
   

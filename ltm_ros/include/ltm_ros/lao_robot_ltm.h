@@ -70,7 +70,6 @@ class LAORobotLTM
     // Tracking points/ar markers
     bool ar_marker_tracking_;
     std::vector<geometry_msgs::PoseArray> observations_;
-    std::vector<Edge> edges_;
     rosbag::Bag bag_;
 
     ros::ServiceClient query_client_;
@@ -110,7 +109,7 @@ class LAORobotLTM
     void KinectCB(const sensor_msgs::PointCloud2& point_cloud);
 
     /**@brief Method to initialize DModel from file**/
-    void SetModelBankFromFile(std::vector<std::string> model_files);
+    // void SetModelBankFromFile(std::vector<std::string> model_files);
 
     /**@brief Save the observations to file**/
     void SaveObservationsToFile(const char* obs_file);
@@ -120,9 +119,6 @@ class LAORobotLTM
 
     /**@brief Get inverse kinematics for the PR2 right arm**/
     bool GetRightIK(const std::vector<double>& ik_pose, const std::vector<double>& seed, std::vector<double>* angles);
-
-    /**@brief Compute the edges between points, by doing nearest neighbor search**/
-    void ComputeEdges(const geometry_msgs::PoseArray& pose_array);
 
 };
 #endif /* _LTM_ROS_LAO_ROBOT_LTM_H_ */
