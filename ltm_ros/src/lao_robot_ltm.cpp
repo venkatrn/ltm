@@ -28,11 +28,6 @@ LAORobotLTM::LAORobotLTM() : num_goals_received_(0),
   private_nh.param("bag_file", bag_file_, string("observations.bag"));
   private_nh.param("reference_frame", reference_frame_, string("/map"));
   private_nh.param("sim_time_step", sim_time_step_, 0.1);
-  vector<double> empty_model_offsets;
-  empty_model_offsets.resize(num_models_);
-  private_nh.param("model_offsets_x", model_offsets_x_, empty_model_offsets);
-  private_nh.param("model_offsets_y", model_offsets_y_, empty_model_offsets);
-  private_nh.param("model_offsets_z", model_offsets_z_, empty_model_offsets);
 
   grasp_idxs_.clear();
 
@@ -55,6 +50,11 @@ LAORobotLTM::LAORobotLTM() : num_goals_received_(0),
   else
   {
     num_models_ = model_files_.size();
+    vector<double> empty_model_offsets;
+    empty_model_offsets.resize(num_models_);
+    private_nh.param("model_offsets_x", model_offsets_x_, empty_model_offsets);
+    private_nh.param("model_offsets_y", model_offsets_y_, empty_model_offsets);
+    private_nh.param("model_offsets_z", model_offsets_z_, empty_model_offsets);
     ROS_INFO("[LAO Robot LTM]: Number of models in bank: %d", num_models_);
     d_model_bank_->InitFromFile(model_files_, model_offsets_x_, model_offsets_y_, model_offsets_z_); 
     ROS_INFO("LTM Node: Initialized model from file\n");
@@ -140,6 +140,7 @@ void LAORobotLTM::LearnCB(const std_msgs::Int32ConstPtr& learning_mode)
         edge_params[jj].push_back(e_params);
       }
     }
+    num_models_ = edge_params.size();
     d_model_bank_->InitFromObs(edges, edge_params); 
     ROS_INFO("LTM Node: Initialized model from live observation\n");
 

@@ -77,6 +77,7 @@ void DModelBank::InitFromObs(vector<Edge> edges, vector<vector<EdgeParams>> edge
       AddEdge(jj, edges[ii], edge_params[jj][ii]);
     } 
   }
+  TFCallback(points_);
 }
 
 
@@ -360,11 +361,11 @@ void DModelBank::TFCallback(geometry_msgs::PoseArray dmodel_points)
     //points.points.push_back(p.position);
   }
 
-  if (visualize_dmodel_)
+  if (visualize_dmodel_ && edge_maps_.size() != 0)
   {
     // TODO: For now visualize all points, including the grasp points
     // Visualizing the 0th model by default
-    assert(edge_maps_.size() >= 1);
+    // assert(edge_maps_.size() >= 1);
     viz_->VisualizeModel(*(edge_maps_[0]), dmodel_points);
   }
   return;
