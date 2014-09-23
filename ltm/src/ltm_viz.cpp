@@ -225,7 +225,16 @@ void LTMViz::VisualizeTraj(const geometry_msgs::PoseArray traj)
 
 void LTMViz::VisualizePolygon(const geometry_msgs::Polygon poly, std::string name)
 {
-  ltm::RGBA color(1.0, 0.0, 0.0, 1.0);
+  // Note: last point == first point
+  if (poly.points.size() < 4)
+  {
+    ROS_INFO("[LTMViz]: Polygon has less than 3 points");
+    return;
+  }
+  //ltm::RGBA normal_color(20.0/255, 73.0/255, 85.0/255, 1.0);
+  ltm::RGBA normal_color(73.0/255, 0.0/255, 77.0/255, 1.0);
+  ltm::RGBA color(241.0/255, 76.0/255, 56.0/255, 1.0);
+
   visualization_msgs::Marker marker;
   marker.header.frame_id = reference_frame_;
   marker.header.stamp = ros::Time::now();
@@ -233,23 +242,72 @@ void LTMViz::VisualizePolygon(const geometry_msgs::Polygon poly, std::string nam
   marker.action = visualization_msgs::Marker::ADD;
   marker.id = 0;
   marker.type = visualization_msgs::Marker::LINE_STRIP;
-  geometry_msgs::Point p;
+  geometry_msgs::Point p, centroid;
+  centroid.x = 0; centroid.y = 0; centroid.z = 0;
   for (int ii = 0; ii < poly.points.size(); ++ii)
   {
     p.x = poly.points[ii].x;
     p.y = poly.points[ii].y;
     p.z = poly.points[ii].z;
     marker.points.push_back(p);
+    if (ii != poly.points.size() - 1)
+    {
+      centroid.x = centroid.x + p.x;
+      centroid.y = centroid.y + p.y;
+      centroid.z = centroid.z + p.z;
+    }
   }
-  marker.scale.x = 0.1;
-  marker.scale.y = 0.1;
-  marker.scale.z = 0.01; 
+  centroid.x = centroid.x / (poly.points.size()-1);
+  centroid.y = centroid.y / (poly.points.size()-1);
+  centroid.z = centroid.z / (poly.points.size()-1);
+  marker.scale.x = 0.02;
+  marker.scale.y = 0.02;
+  marker.scale.z = 0.02; 
   marker.color.r = color.r;
   marker.color.g = color.g;
   marker.color.b = color.b;
   marker.color.a = color.a;
   marker.lifetime = ros::Duration(100.0);
   PublishMarker(marker);
+
+
+  // Visualize the normal to the polygon
+  geometry_msgs::Point normal, v1, v2;
+  v1.x = centroid.x - poly.points[0].x;
+  v1.y = centroid.y - poly.points[0].y;
+  v1.z = centroid.z - poly.points[0].z;
+  v2.x = centroid.x - poly.points[1].x;
+  v2.y = centroid.y - poly.points[1].y;
+  v2.z = centroid.z - poly.points[1].z;
+  normal.x = v1.y*v2.z - v1.z*v2.y;
+  normal.y = -v1.x*v2.z + v1.z*v2.x;
+  normal.z = v1.x*v2.y - v1.y*v2.x;
+  const double norm = Norm(normal);
+  const double kArrowLength = max(norm, 0.25);
+  geometry_msgs::Point end_point;
+  end_point.x = centroid.x + kArrowLength*normal.x/max(1e-5, norm);
+  end_point.y = centroid.y + kArrowLength*normal.y/max(1e-5, norm);
+  end_point.z = centroid.z + kArrowLength*normal.z/max(1e-5, norm);
+
+  visualization_msgs::Marker normal_marker;
+  normal_marker.header.frame_id = reference_frame_;
+  normal_marker.header.stamp = ros::Time::now();
+  normal_marker.ns = name + "_normal";
+  normal_marker.action = visualization_msgs::Marker::ADD;
+  normal_marker.id = 0;
+  normal_marker.type = visualization_msgs::Marker::ARROW;
+  normal_marker.points.push_back(centroid);
+  normal_marker.points.push_back(end_point);
+  normal_marker.scale.x = 0.015;
+  normal_marker.scale.y = 0.04;
+  normal_marker.scale.z = 0.04;
+  normal_marker.color.r = normal_color.r;
+  normal_marker.color.g = normal_color.g;
+  normal_marker.color.b = normal_color.b;
+  normal_marker.color.a = normal_color.a;
+  normal_marker.lifetime = ros::Duration(100.0);
+  PublishMarker(normal_marker);
+
 }
 
 void LTMViz::PublishMarker(visualization_msgs::Marker& marker)
