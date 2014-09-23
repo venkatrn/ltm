@@ -1,0 +1,13 @@
+<launch>
+  <master auto="start"/>
+  <param name="/use_sim_time" value="false"/>
+
+  <!--Bring up the ltm_perception node-->
+  <node pkg="ltm_perception" type="ltm_perception_node" name="ltm_perception" output="screen">
+    <remap from="input_cloud" to="/kinect_head/depth_registered/points"/>
+    <param name="pcl_visualization" value="true"/> -->
+    <param name="reference_frame" value="/base_link"/> -->
+      <!--<param name="obs_file" value="$(find ltm_ros)/data/observations.txt"/> -->
+      <!--<param name="sim_time_step" value="0.2"/> -->
+  </node>
+</launch>

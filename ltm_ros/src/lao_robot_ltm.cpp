@@ -10,6 +10,7 @@
 
 #include <pcl/kdtree/kdtree_flann.h>
 
+#include <boost/lexical_cast.hpp>
 
 #include <algorithm>
 
@@ -326,10 +327,13 @@ void LAORobotLTM::TrajExecCB(const std_msgs::Int32ConstPtr& exec_mode_ptr)
   return;
 }
 
-void LAORobotLTM::PerceptionCB(const geometry_msgs::PolygonStamped& rect_corners)
+void LAORobotLTM::PerceptionCB(const ltm_msgs::PolygonArrayStamped& rectangles)
 {
-  ROS_INFO("Visualizing polygon");
-  viz_->VisualizePolygon(rect_corners.polygon, string("test_polygon")); 
+  for (int ii = 0; ii < rectangles.polygons.size(); ++ii)
+  {
+    string id = "polygon" + boost::lexical_cast<string>(ii);
+    viz_->VisualizePolygon(rectangles.polygons[ii], id); 
+  }
   return;
 }
 

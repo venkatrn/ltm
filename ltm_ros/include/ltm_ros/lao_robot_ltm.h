@@ -13,7 +13,7 @@
 #include <ltm/ltm_viz.h>
 
 #include <ros/ros.h>
-#include <ltm_msgs/DModel.h>
+#include <ltm_msgs/PolygonArrayStamped.h>
 
 #include <kinematics_msgs/GetKinematicSolverInfo.h>
 #include <kinematics_msgs/GetPositionIK.h>
@@ -111,7 +111,7 @@ class LAORobotLTM
     /**@brief This is temporary--will go away once the API for recording and stopping rosbags is ready**/
     void KinectCB(const sensor_msgs::PointCloud2& point_cloud);
     /**@brief Receive rectangles output by the perception node. These will be used for generating models from the observed scene**/
-    void PerceptionCB(const geometry_msgs::PolygonStamped& rect_corners);
+    void PerceptionCB(const ltm_msgs::PolygonArrayStamped& rectangles);
 
     /**@brief Method to initialize DModel from file**/
     // void SetModelBankFromFile(std::vector<std::string> model_files);
