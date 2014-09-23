@@ -11,6 +11,7 @@
 
 #include <ros/ros.h>
 #include <geometry_msgs/PoseArray.h>
+#include <geometry_msgs/PolygonStamped.h>
 #include <tf/LinearMath/Vector3.h>
 #include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
@@ -58,6 +59,7 @@ class LTMViz
 
     void VisualizeAxis(const geometry_msgs::Pose axis);
     void VisualizeTraj(const geometry_msgs::PoseArray traj);
+    void VisualizePolygon(const geometry_msgs::Polygon poly, std::string name);
 
   private:
     ros::NodeHandle nh_;

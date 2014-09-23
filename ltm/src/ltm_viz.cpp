@@ -223,14 +223,43 @@ void LTMViz::VisualizeTraj(const geometry_msgs::PoseArray traj)
   PublishMarker(marker);
 }
 
+void LTMViz::VisualizePolygon(const geometry_msgs::Polygon poly, std::string name)
+{
+  ltm::RGBA color(1.0, 0.0, 0.0, 1.0);
+  visualization_msgs::Marker marker;
+  marker.header.frame_id = reference_frame_;
+  marker.header.stamp = ros::Time::now();
+  marker.ns = name;
+  marker.action = visualization_msgs::Marker::ADD;
+  marker.id = 0;
+  marker.type = visualization_msgs::Marker::LINE_STRIP;
+  geometry_msgs::Point p;
+  for (int ii = 0; ii < poly.points.size(); ++ii)
+  {
+    p.x = poly.points[ii].x;
+    p.y = poly.points[ii].y;
+    p.z = poly.points[ii].z;
+    marker.points.push_back(p);
+  }
+  marker.scale.x = 0.1;
+  marker.scale.y = 0.1;
+  marker.scale.z = 0.01; 
+  marker.color.r = color.r;
+  marker.color.g = color.g;
+  marker.color.b = color.b;
+  marker.color.a = color.a;
+  marker.lifetime = ros::Duration(100.0);
+  PublishMarker(marker);
+}
+
 void LTMViz::PublishMarker(visualization_msgs::Marker& marker)
 {
   marker_publisher_.publish(marker);
-  usleep(10000);
+  //usleep(10000);
 }
 
 void LTMViz::PublishMarkerArray(visualization_msgs::MarkerArray& marker_array)
 {
   marker_array_publisher_.publish(marker_array);
-  usleep(1000);
+  //usleep(1000);
 }

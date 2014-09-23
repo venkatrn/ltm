@@ -10,6 +10,7 @@
 #include <ltm/d_model_bank.h>
 #include <ltm/lao_planner.h>
 #include <ltm/d_model_learner.h>
+#include <ltm/ltm_viz.h>
 
 #include <ros/ros.h>
 #include <ltm_msgs/DModel.h>
@@ -47,6 +48,7 @@ class LAORobotLTM
     DModelLearner* learner_;
 
     PViz pviz_;
+    LTMViz* viz_;
     tf::TransformListener tf_listener_;
 
     int num_models_;
@@ -82,6 +84,7 @@ class LAORobotLTM
     ros::Subscriber traj_exec_sub_;
     ros::Subscriber learning_mode_sub_;
     ros::Subscriber ar_marker_sub_;
+    ros::Subscriber perception_sub_;
  
     // Publishers
     ros::Publisher plan_pub_;
@@ -103,10 +106,12 @@ class LAORobotLTM
     void TrajExecCB(const std_msgs::Int32ConstPtr& exec_mode_ptr);
     /**@brief Callback to trigger and end learning phase**/
     void LearnCB(const std_msgs::Int32ConstPtr& learning_mode);
-    /**@ brief Recieve and store AR marker poses**/
+    /**@brief Recieve and store AR marker poses**/
     void ARMarkersCB(const ar_track_alvar_msgs::AlvarMarkersConstPtr& ar_markers);
     /**@brief This is temporary--will go away once the API for recording and stopping rosbags is ready**/
     void KinectCB(const sensor_msgs::PointCloud2& point_cloud);
+    /**@brief Receive rectangles output by the perception node. These will be used for generating models from the observed scene**/
+    void PerceptionCB(const geometry_msgs::PolygonStamped& rect_corners);
 
     /**@brief Method to initialize DModel from file**/
     // void SetModelBankFromFile(std::vector<std::string> model_files);

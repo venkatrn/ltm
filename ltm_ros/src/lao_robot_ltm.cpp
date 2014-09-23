@@ -34,6 +34,8 @@ LAORobotLTM::LAORobotLTM() : num_goals_received_(0),
   d_model_bank_ = new DModelBank(reference_frame_);
   planner_ = new LAOPlanner();
   learner_ = new DModelLearner(reference_frame_);
+  viz_ = new LTMViz("ltm_node_viz");
+  viz_->SetReferenceFrame(reference_frame_);
   // Initialize force primitives and other dmodel_bank_ parameters
   d_model_bank_->InitForcePrimsFromFile(fprims_file_.c_str());
   d_model_bank_->SetSimTimeStep(sim_time_step_);
@@ -60,13 +62,14 @@ LAORobotLTM::LAORobotLTM() : num_goals_received_(0),
     ROS_INFO("LTM Node: Initialized model from file\n");
     // Setup planner.
   }
-  // TODO: Make all the 
+  // TODO: Make all the topic names rosparams.
   point_cloud_sub_ = nh_.subscribe ("/kinect_head/depth_registered/points_throttle", 1, &LAORobotLTM::KinectCB, this);
   goal_sub_ = nh_.subscribe ("goal_pose", 1, &LAORobotLTM::GoalCB, this);
   grasp_sub_ = nh_.subscribe ("gripper_pose", 1, &LAORobotLTM::GraspCB, this);
   traj_exec_sub_ = nh_.subscribe ("traj_exec_mode", 1, &LAORobotLTM::TrajExecCB, this);
   learning_mode_sub_ = nh_.subscribe ("learning_mode", 1, &LAORobotLTM::LearnCB, this);
   ar_marker_sub_ = nh_.subscribe("ar_pose_marker", 1, &LAORobotLTM::ARMarkersCB, this);
+  perception_sub_ = nh_.subscribe("rectangles", 1, &LAORobotLTM::PerceptionCB, this);
 
   // Initialize IK clients
   query_client_ = nh_.serviceClient<kinematics_msgs::GetKinematicSolverInfo>("pr2_right_arm_kinematics/get_ik_solver_info");
@@ -320,6 +323,13 @@ void LAORobotLTM::TrajExecCB(const std_msgs::Int32ConstPtr& exec_mode_ptr)
     d_model_bank_->SetInternalGoalState(goal_state_);
     PlanAndExecute();
   }
+  return;
+}
+
+void LAORobotLTM::PerceptionCB(const geometry_msgs::PolygonStamped& rect_corners)
+{
+  ROS_INFO("Visualizing polygon");
+  viz_->VisualizePolygon(rect_corners.polygon, string("test_polygon")); 
   return;
 }
 
