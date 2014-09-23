@@ -51,12 +51,20 @@ namespace perception_utils
   /**@brief Draw bounding box for point cloud**/
   void DrawOrientedBoundingBox(pcl::visualization::PCLVisualizer& viewer, PointCloudPtr cloud, std::string box_id);
   void DrawAxisAlignedBoundingBox(pcl::visualization::PCLVisualizer& viewer, PointCloudPtr cloud, std::string box_id);
-
-  /**@brief Get the corner points in a point cloud (of a rectangle)**/
-  void GetRectangleCorners(PointCloudPtr cloud, std::vector<PointT>* corners);
-
   /**@brief Draw rectangle boundaries**/
   void DrawRectangle(pcl::visualization::PCLVisualizer& viewer, const std::vector<PointT>& corners, std::string rect_id);
+
+  /**@brief Get planar convex hull vertices**/
+  void GetPolygonVertices(PointCloudPtr cloud, std::vector<PointT>* poly_vertices);
+
+  /**@brief Input: periphery points from planar segmentation. Output: Points projected onto a ransac rectangle (implemented by finding 4 lines), and also the two orthonormal axis vectors
+   **/
+  bool GetRectanglePoints(PointCloudPtr cloud, PointCloudPtr rectangle_points, std::vector<Eigen::Vector3f>* axes);
+
+
+  /**@brief Get the corner points in a point cloud (of a rectangle boundary)**/
+  void GetRectangleCorners(PointCloudPtr cloud, std::vector<PointT>* corners, const std::vector<Eigen::Vector3f>& axes);
+
 
   void DisplayPlanarRegions(pcl::visualization::PCLVisualizer& viewer, std::vector<pcl::PlanarRegion<PointT>, Eigen::aligned_allocator<pcl::PlanarRegion<PointT>>> &regions);
 } /** perception_utils **/

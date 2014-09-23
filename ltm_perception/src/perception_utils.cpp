@@ -28,6 +28,9 @@
 #include <pcl/segmentation/euclidean_plane_coefficient_comparator.h>
 #include <pcl/features/integral_image_normal.h> 
 
+#include <pcl/surface/concave_hull.h>
+
+
 #include <boost/thread/thread.hpp>
 
 // Euclidean cluster extraction params
@@ -69,31 +72,22 @@ void perception_utils::DisplayPlanarRegions (pcl::visualization::PCLVisualizer& 
   unsigned char blu [6] = {  0,   0, 255,   0, 255, 255};
 
   pcl::PointCloud<PointT>::Ptr contour (new pcl::PointCloud<PointT>);                                                  
-
   for (size_t i = 0; i < regions.size (); i++)
   {
-    Eigen::Vector3f centroid = regions[i].getCentroid ();
-    Eigen::Vector4f model = regions[i].getCoefficients ();
-    pcl::PointXYZ pt1 = pcl::PointXYZ (centroid[0], centroid[1], centroid[2]);                                         
-    pcl::PointXYZ pt2 = pcl::PointXYZ (centroid[0] + (0.5f * model[0]),                                                
-                                       centroid[1] + (0.5f * model[1]),                                                
-                                       centroid[2] + (0.5f * model[2]));                                               
-    printf("Centroid: %f %f %f\n", centroid[0], centroid[1], centroid[2]);
-    printf("Model: %f %f %f\n", model[0], model[1], model[2]);
+    Eigen::Vector3f centroid = regions[i].getCentroid();
+    Eigen::Vector4f model = regions[i].getCoefficients();
+    pcl::PointXYZ pt1 = pcl::PointXYZ (centroid[0], centroid[1], centroid[2]);     pcl::PointXYZ pt2 = pcl::PointXYZ (centroid[0] + (0.5f * model[0]), centroid[1] + (0.5f * model[1]), centroid[2] + (0.5f * model[2]));                                               
     string id = std::string("normal_") + boost::lexical_cast<string>(i);
     viewer.addArrow (pt2, pt1, 1.0, 0, 0, false, id);     
     //viewer.addLine (pt2, pt1, 1.0, 0, 0, id);                                    //viewer.setShapeRenderingProperties (pcl::visualization::PCL_VISUALIZER_LINE_WIDTH, 5, id);
     contour->points = regions[i].getContour();
 
-    vector<PointT> corners;
-    GetRectangleCorners(contour, &corners);
-    DrawRectangle(viewer, corners, id); 
-    
-    printf("Num points: %d\n", contour->size());
     id = std::string("normal_") + boost::lexical_cast<string>(i);
     pcl::visualization::PointCloudColorHandlerCustom <PointT> color (contour, red[i%6], grn[i%6], blu[i%6]);           
-    if(!viewer.updatePointCloud(contour, color, id))                                                                
-      viewer.addPointCloud (contour, color, id);                                                                    
+    if(!viewer.updatePointCloud(contour, color, id))
+    {
+      viewer.addPointCloud (contour, color, id);
+    }
     viewer.setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 5, id);                 
   }
 }
@@ -120,6 +114,7 @@ void perception_utils::OrganizedSegmentation(PointCloudPtr cloud, std::vector<pc
   mps.setMinInliers (1000);
   mps.setAngularThreshold (pcl::deg2rad (3.0)); //3 degrees             
   mps.setDistanceThreshold (0.02); //2cm  
+  mps.setProjectPoints(true);
 
   double mps_start = pcl::getTime ();
   std::vector<pcl::ModelCoefficients> model_coefficients;
@@ -139,7 +134,7 @@ void perception_utils::OrganizedSegmentation(PointCloudPtr cloud, std::vector<pc
     mps.segment (*regions);//, model_coefficients, inlier_indices, labels, label_indices, boundary_indices);
   }
   double mps_end = pcl::getTime ();
-  printf("MPS+Refine took:%f\n", double(mps_end - mps_start));
+  // printf("MPS+Refine took:%f\n", double(mps_end - mps_start));
 
 
 }
@@ -240,6 +235,75 @@ pcl::ModelCoefficients::Ptr perception_utils::GetLineCoefficients(PointCloudPtr 
   extract.filter(*line_points);
 
   return coefficients; 
+}
+
+bool perception_utils::GetRectanglePoints(PointCloudPtr cloud, PointCloudPtr rectangle_points, vector<Eigen::Vector3f>* axes)
+{
+  PointCloudPtr cloud_temp (new PointCloud);
+  cloud_temp = cloud;
+  axes->clear();
+
+  pcl::ModelCoefficients::Ptr coefficients (new pcl::ModelCoefficients);
+  pcl::PointIndices::Ptr inliers (new pcl::PointIndices);;
+  // Create the segmentation object
+  pcl::SACSegmentation<PointT> seg;
+  // Optional
+  seg.setOptimizeCoefficients (true);
+  // Mandatory
+  seg.setModelType (pcl::SACMODEL_LINE);
+  seg.setMethodType (pcl::SAC_RANSAC);
+  seg.setDistanceThreshold (0.01); //0.01
+  // Projector
+  pcl::ProjectInliers<PointT> projection;
+  projection.setModelType(pcl::SACMODEL_LINE);
+  PointCloudPtr line_points(new PointCloud);
+  PointCloudPtr line_proj_points(new PointCloud);
+  pcl::ExtractIndices<PointT> extract;
+
+  for (int ii = 0; ii < 4; ++ii)
+  {
+  // Could not find four lines
+  if (cloud_temp->size() == 0)
+  {
+    return false;
+  }
+  seg.setInputCloud (cloud_temp->makeShared ());
+  seg.segment (*inliers, *coefficients);
+  Eigen::Vector3f axis(coefficients->values[3], coefficients->values[4], coefficients->values[5]);
+  axis.normalize();
+  if (ii == 0)
+  {
+    axes->push_back(axis);
+  }
+  else if (fabs(axis.dot((*axes)[0])) < 0.2 && axes->size() < 2) // get the orthogonal axes
+  {
+    
+    axes->push_back(axis);
+  }
+
+  extract.setInputCloud (cloud_temp);
+  extract.setIndices (inliers);
+  extract.setNegative (false);
+  extract.filter(*line_points);
+
+  // Remove inliers for next iteration
+  extract.setNegative(true);
+  extract.filter(*cloud_temp);
+
+  projection.setInputCloud(line_points->makeShared());
+  projection.setModelCoefficients(coefficients);
+  projection.filter(*line_proj_points);
+
+  // Add projected points to new cloud
+  (*rectangle_points) += *line_proj_points;
+  }
+
+  // Could not find two orthogonal directions
+  if (axes->size() < 2) 
+  {
+    return false;
+  }
+  return true;
 }
 
 /*
@@ -366,7 +430,30 @@ PointCloudPtr perception_utils::DownsamplePointCloud(PointCloudPtr cloud)
   return downsampled_cloud;
 }
 
-void perception_utils::GetRectangleCorners(PointCloudPtr cloud, std::vector<PointT>* corners)
+void perception_utils::GetPolygonVertices(PointCloudPtr cloud, std::vector<PointT>* poly_vertices)
+{
+  PointCloudPtr convex_hull(new PointCloud);
+  vector<pcl::Vertices> polygons;
+  pcl::ConvexHull<PointT> chull;
+  chull.setInputCloud(cloud);
+  chull.setDimension(2);
+  //chull.setAlpha(0.1);
+  chull.reconstruct(*convex_hull, polygons);
+  //chull.performReconstruction2D(*convex_hull, polygons);
+
+  poly_vertices->clear();
+  assert(polygons.size() > 0);
+  printf("Poylgon size: %d\n", polygons[0].vertices.size());
+  // Assume there is just one polygon, and that its a rectangle
+  for (int ii = 0; ii < polygons[0].vertices.size(); ++ii)
+  {
+    const int idx = polygons[0].vertices[ii];
+    PointT vertex_point = (*convex_hull)[idx];
+    poly_vertices->push_back(vertex_point);
+  }
+}
+
+void perception_utils::GetRectangleCorners(PointCloudPtr cloud, std::vector<PointT>* corners, const vector<Eigen::Vector3f>& axes)
 {
   corners->clear();
   // compute principal direction
@@ -378,13 +465,21 @@ void perception_utils::GetRectangleCorners(PointCloudPtr cloud, std::vector<Poin
   Eigen::Matrix3f eigDx = eigen_solver.eigenvectors();
   // Do this because Eigen sorts by smallest to largest (largest to smallest is the convenient one)
   eigDx.col(0).swap(eigDx.col(2));
+
+  //TODO: the previous stuff (SVD) can go when I am sure that this works
+  if (axes.size() == 2)
+  {
+    eigDx.col(0) = axes[0];
+    eigDx.col(1) = axes[1];
+  }
+
   // Enforce orthogonality
   eigDx.col(2) = eigDx.col(0).cross(eigDx.col(1));
 
   // move the points to the that reference frame
   Eigen::Matrix4f p2w(Eigen::Matrix4f::Identity());
-  //p2w.block<3,3>(0,0) = eigDx.transpose();
   p2w.block<3,3>(0,0) = eigDx.transpose();
+  //p2w.block<3,3>(0,0) = eigDx;
   p2w.block<3,1>(0,3) = -1.f * (p2w.block<3,3>(0,0) * centroid.head<3>());
   pcl::PointCloud<PointT> cPoints;
   pcl::transformPointCloud(*cloud, cPoints, p2w);
@@ -439,16 +534,20 @@ void perception_utils::DrawRectangle(pcl::visualization::PCLVisualizer& viewer, 
   p_mid.y = 0.5*(p1.y + p3.y);
   p_mid.z = 0.5*(p1.z + p3.z);
 
-  string axis1_id = rect_id + string("_axis1");
-  string axis2_id = rect_id + string("_axis2");
-  string axis3_id = rect_id + string("_axis3");
-  viewer.addLine(p1, p2, 0.0, 0.0, 1.0, axis1_id);
-  viewer.addLine(p1, p4, 0.0, 0.0, 1.0, axis2_id);
-  //TODO: Fix this
-  viewer.addLine(p_mid, p_mid, 1.0, 0.0, 0.0, axis3_id);
-  viewer.setShapeRenderingProperties (pcl::visualization::PCL_VISUALIZER_LINE_WIDTH, 5, axis1_id);
-  viewer.setShapeRenderingProperties (pcl::visualization::PCL_VISUALIZER_LINE_WIDTH, 5, axis2_id);
-  viewer.setShapeRenderingProperties (pcl::visualization::PCL_VISUALIZER_LINE_WIDTH, 5, axis3_id);
+  string s1_id = rect_id + string("_side1");
+  string s2_id = rect_id + string("_side2");
+  string s3_id = rect_id + string("_side3");
+  string s4_id = rect_id + string("_side4");
+  viewer.addLine(p1, p2, 0.0, 0.0, 1.0, s1_id);
+  viewer.addLine(p2, p3, 0.0, 0.0, 1.0, s2_id);
+  viewer.addLine(p3, p4, 0.0, 0.0, 1.0, s3_id);
+  viewer.addLine(p4, p1, 0.0, 0.0, 1.0, s4_id);
+  // TODO: Fix this
+  // viewer.addLine(p_mid, p_mid, 1.0, 0.0, 0.0, axis3_id);
+  viewer.setShapeRenderingProperties (pcl::visualization::PCL_VISUALIZER_LINE_WIDTH, 5, s1_id);
+  viewer.setShapeRenderingProperties (pcl::visualization::PCL_VISUALIZER_LINE_WIDTH, 5, s2_id);
+  viewer.setShapeRenderingProperties (pcl::visualization::PCL_VISUALIZER_LINE_WIDTH, 5, s3_id);
+  viewer.setShapeRenderingProperties (pcl::visualization::PCL_VISUALIZER_LINE_WIDTH, 5, s4_id);
 }
 
 void perception_utils::DrawOrientedBoundingBox(pcl::visualization::PCLVisualizer& viewer, PointCloudPtr cloud, string box_id)
