@@ -411,6 +411,54 @@ void DModelLearner::ComputeEdges(const geometry_msgs::PoseArray& pose_array, vec
   return;
 }
 
+double DModelLearner::GetMinCut(const vector<vector<double>>& edge_weights, vector<Edge>* min_cut_edges)
+{
+  vector<vector<double>> weights = edge_weights;
+  int N = weights.size();
+  vector<int> cut, best_cut;
+  vector<bool> used(N);
+  double best_weight = -1;
+  double inf = numeric_limits<double>::max();
+  for (int phase = N-1; phase >= 0; phase--) {
+    vector<double> w = weights[0];
+    vector<bool> added = used;
+    int prev, last = 0;
+    for (int i = 0; i < phase; i++) {
+      prev = last;
+      last = -1;
+      for (int j = 1; j < N; j++)
+        if (!added[j] && (w[j] != inf) && (last == -1 || w[j] > w[last])) last = j;
+      if (i == phase-1) {
+        for (int j = 0; j < N; j++) if (weights[prev][j] != inf) weights[prev][j] += weights[last][j];
+        for (int j = 0; j < N; j++) if (weights[j][prev] != inf) weights[j][prev] = weights[prev][j];
+        used[last] = true;
+        cut.push_back(last);
+        if (best_weight == -1 || w[last] < best_weight) {
+          best_cut = cut;
+          best_weight = w[last];
+        }
+      } else {
+        for (int j = 0; j < N; j++)
+          if (w[j] != inf) w[j] += weights[last][j];
+        added[last] = true;
+      }
+    }
+  }
+  min_cut_edges->clear();
+  for (size_t ii = 0; ii < best_cut.size(); ++ii)
+  {
+    for (size_t jj = 0; jj < N; ++jj)
+    {
+      const int vertex = best_cut[ii];
+      if (int(jj) == vertex) continue;
+      if (weights[vertex][jj] == numeric_limits<double>::max()) continue;
+      if (find(best_cut.begin(), best_cut.end(), jj) != best_cut.end()) continue;
+      min_cut_edges->push_back(make_pair(vertex, jj));
+    }
+  }
+  return best_weight;
+}
+
 void DModelLearner::PlanesToKinematicModels(const ltm_msgs::PolygonArrayStamped polygons , vector<AbstractKinematicModel*>* kinematic_models)
 {
   const int num_polygons = polygons.polygons.size();
@@ -540,6 +588,150 @@ void DModelLearner::GenerateModels(const geometry_msgs::PoseArray& points, const
             (*edge_params)[ii].push_back(e_params);
           }
           ROS_INFO("Model %d", ii);
+          for (int jj = 0; jj < num_edges; ++jj)
+          {
+            ROS_INFO("    %d--->%d : %d",edges[jj].first, edges[jj].second, (*edge_params)[ii][jj].joint);
+          }
+          break;
+        }
+      case SPHERICAL:
+        {
+          const SphericalModel* spherical_model = dynamic_cast<const SphericalModel*>(kinematic_model);
+          //TODO: Implement
+          break;
+        }
+      default:
+        ROS_INFO("[DModelLearner]: Unsupported model type in autogeneration of models");
+    }
+  }
+}
+
+void DModelLearner::GenerateModelsMinCut(const geometry_msgs::PoseArray& points, const std::vector<Edge>& edges, const std::vector<AbstractKinematicModel*>& kinematic_models, std::vector<std::vector<EdgeParams>>* edge_params)
+{
+  edge_params->clear();
+  const int num_edges = edges.size(); 
+  if (num_edges == 0)
+  {
+    ROS_WARN("[DModel Learner]: No edges in the model");
+    return;
+  }
+  const int num_models = kinematic_models.size();
+  if (num_models == 0)
+  {
+    ROS_WARN("[DModel Learner]: No kinematic models available to compute edge parameteres");
+    return;
+  }
+  edge_params->resize(num_models);
+  // Make sure tf is available, so that we can set the model params in the local frames
+  candidate_model_bank_->TFCallback(points);
+
+  const double kAlphaDist = 0.5;
+  const double kAlphaAngle = 0.5;
+  for (int ii = 0; ii < num_models; ++ii)
+  {
+    const AbstractKinematicModel* kinematic_model = kinematic_models[ii];
+    JointType joint_type = kinematic_model->joint_type();
+    switch(joint_type)
+    {
+      case PRISMATIC:
+        {
+          const PrismaticModel* prismatic_model = dynamic_cast<const PrismaticModel*>(kinematic_model);
+          tf::Vector3 axis = prismatic_model->axis();
+          // Compute edge weights for mincut
+          vector<vector<double>> weights(num_edges);
+          for (int jj = 0; jj < num_edges; ++jj)
+          {
+            weights[jj].resize(num_edges, numeric_limits<double>::max());
+          }
+          double d_weight, p_weight, total_weight;
+          for (int jj = 0; jj < num_edges; ++jj)
+          {
+            tf::Point p1, p2;
+            tf::pointMsgToTF(points.poses[edges[jj].first].position, p1);
+            tf::pointMsgToTF(points.poses[edges[jj].second].position, p2);
+            tf::Vector3 edge = p1 - p2;
+            tf::Vector3 normalized_edge = edge.normalized();
+            d_weight = edge.length2();
+            p_weight = fabs(normalized_edge.dot(axis));
+            total_weight = exp(-(kAlphaDist * d_weight + kAlphaAngle * p_weight));
+            weights[edges[jj].first][edges[jj].second] = total_weight;
+            weights[edges[jj].second][edges[jj].first] = total_weight;
+          }
+          vector<Edge> min_cut_edges;
+          const double min_cut = GetMinCut(weights, &min_cut_edges);
+          ROS_INFO("Mincut (Prismatic): %f", min_cut);
+          for (int jj = 0; jj < num_edges; ++jj)
+          {
+            EdgeParams e_params;
+            if (find(min_cut_edges.begin(), min_cut_edges.end(), edges[jj]) == min_cut_edges.end())
+            {
+              e_params.joint = RIGID;
+            }
+            else
+            {
+              string local_frame = to_string(edges[jj].first);
+              e_params.joint = PRISMATIC;
+              e_params.normal = candidate_model_bank_->TransformVector(axis, reference_frame_, local_frame);
+            }
+            (*edge_params)[ii].push_back(e_params);
+          }
+          ROS_INFO("Prismatic Model %d", ii);
+          for (int jj = 0; jj < num_edges; ++jj)
+          {
+            ROS_INFO("    %d--->%d : %d",edges[jj].first, edges[jj].second, (*edge_params)[ii][jj].joint);
+          }
+          break;
+        }
+      case REVOLUTE:
+        {
+          const RevoluteModel* revolute_model = dynamic_cast<const RevoluteModel*>(kinematic_model);
+          tf::Vector3 axis = revolute_model->axis();
+          tf::Vector3 axis_point = revolute_model->axis_point();
+          // Compute edge weights for mincut
+          vector<vector<double>> weights(num_edges);
+          for (int jj = 0; jj < num_edges; ++jj)
+          {
+            weights[jj].resize(num_edges, numeric_limits<double>::max());
+          }
+          double d_weight, r_weight, total_weight;
+          for (int jj = 0; jj < num_edges; ++jj)
+          {
+            tf::Point p1, p2;
+            tf::pointMsgToTF(points.poses[edges[jj].first].position, p1);
+            tf::pointMsgToTF(points.poses[edges[jj].second].position, p2);
+            tf::Vector3 edge = p1 - p2;
+            tf::Vector3 p1_projection = p1.dot(axis) * axis;
+            tf::Vector3 p2_projection = p2.dot(axis) * axis;
+            tf::Vector3 p1_center = axis_point + p1_projection;
+            tf::Vector3 p2_center = axis_point + p2_projection;
+            tf::Vector3 p1_arm = (p1 - p1_center), p2_arm = (p2 - p2_center);
+            p1_arm.normalize(); p2_arm.normalize();
+            d_weight = edge.length2();
+            r_weight = p1_arm.cross(p2_arm).length();
+            total_weight = exp(-(kAlphaDist * d_weight + kAlphaAngle * r_weight));
+            weights[edges[jj].first][edges[jj].second] = total_weight;
+            weights[edges[jj].second][edges[jj].first] = total_weight;
+          }
+          vector<Edge> min_cut_edges;
+          const double min_cut = GetMinCut(weights, &min_cut_edges);
+          ROS_INFO("Mincut (Revolute): %f", min_cut);
+          for (int jj = 0; jj < num_edges; ++jj)
+          {
+            EdgeParams e_params;
+            if (find(min_cut_edges.begin(), min_cut_edges.end(), edges[jj]) == min_cut_edges.end())
+            {
+              e_params.joint = RIGID;
+            }
+            else
+            {
+              string local_frame = to_string(edges[jj].first);
+              e_params.joint = REVOLUTE;
+              e_params.normal = candidate_model_bank_->TransformVector(axis, reference_frame_, local_frame);
+              e_params.center = candidate_model_bank_->TransformPoint(axis_point, reference_frame_, local_frame);
+            }
+            (*edge_params)[ii].push_back(e_params);
+          }
+          ROS_INFO("Revolute Model %d", ii);
           for (int jj = 0; jj < num_edges; ++jj)
           {
             ROS_INFO("    %d--->%d : %d",edges[jj].first, edges[jj].second, (*edge_params)[ii][jj].joint);

@@ -58,6 +58,10 @@ class DModelLearner
     void PlanesToKinematicModels(const ltm_msgs::PolygonArrayStamped polygons, std::vector<AbstractKinematicModel*>* kinematic_models);
     /**@brief Generate possible models (edge params) for a given set of points and edges**/
     void GenerateModels(const geometry_msgs::PoseArray& points, const std::vector<Edge>& edges, const std::vector<AbstractKinematicModel*>& kinematic_models, std::vector<std::vector<EdgeParams>>* edge_params);
+    void GenerateModelsMinCut(const geometry_msgs::PoseArray& points, const std::vector<Edge>& edges, const std::vector<AbstractKinematicModel*>& kinematic_models, std::vector<std::vector<EdgeParams>>* edge_params);
+    /**@brief Compute the mincut, and corresponding micut edges, given a weight matrix for the graph**/
+    // This is straight from http://stanford.edu/~liszt90/acm/notebook.html#file6
+    double GetMinCut(const std::vector<std::vector<double>>& weights, std::vector<Edge>* min_cut_edges);
 
   private:
     int num_hypotheses_; ///< Number of candidate models 

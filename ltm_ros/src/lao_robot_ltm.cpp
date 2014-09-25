@@ -150,7 +150,7 @@ void LAORobotLTM::LearnCB(const std_msgs::Int32ConstPtr& learning_mode)
     */
     vector<AbstractKinematicModel*> kinematic_models;
     learner_->PlanesToKinematicModels(rectangles_, &kinematic_models);
-    learner_->GenerateModels(d_model_bank_->GetDModelPoints(), edges, kinematic_models, &edge_params);
+    learner_->GenerateModelsMinCut(d_model_bank_->GetDModelPoints(), edges, kinematic_models, &edge_params);
     num_models_ = edge_params.size();
     d_model_bank_->InitFromObs(edges, edge_params); 
     ROS_INFO("LTM Node: Initialized model from live observation\n");

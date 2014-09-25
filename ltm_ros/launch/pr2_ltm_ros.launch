@@ -1,7 +1,13 @@
 <launch>
   <master auto="start"/>
   <param name="/use_sim_time" value="false"/>
+
+  <!-- Args-->
   <arg name="use_kinect" default="true" />
+  <arg name="debug" default="false" />
+
+  <arg unless="$(arg debug)" name="launch_prefix" value="" />
+  <arg     if="$(arg debug)" name="launch_prefix" value="gdb --ex run --args" />
 
   <!-- Bring up the AR Marker tracking node-->
   <group if="$(arg use_kinect)">
@@ -13,11 +19,12 @@
   <include file="$(find pr2_arm_kinematics)/launch/pr2_ik_rarm_node.launch"/>
 
   <!--Bring up the ltm_ros node-->
-  <node pkg="ltm_ros" type="ltm_ros_node" name="ltm_ros" output="screen">
+  <node pkg="ltm_ros" type="ltm_ros_node" name="ltm_ros" output="screen" launch-prefix="$(arg launch_prefix)" respawn="false">
     <param name="obs_file" value="$(find ltm_ros)/data/observations.txt"/> 
     <param name="bag_file" value="$(find ltm_ros)/data/observations.bag"/> 
     <param name="use_model_file" value="false"/>
-    <param name="fprims_file" value="$(find ltm)/matlab/fprims/circle_40.fprim"/>
+    <!--<param name="fprims_file" value="$(find ltm)/matlab/fprims/circle_40.fprim"/>-->
+    <param name="fprims_file" value="$(find ltm)/matlab/fprims/sphere_20.fprim"/>
     <param name="sim_time_step" value="0.2"/> <!--1.0-->
     <param name="reference_frame" value="/base_link"/>
   </node>
