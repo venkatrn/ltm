@@ -130,6 +130,7 @@ void LAORobotLTM::LearnCB(const std_msgs::Int32ConstPtr& learning_mode)
     learner_->LearnPrior(observations_);
     */
     vector<Edge> edges;
+    learner_->SetModelBank(d_model_bank_);
     learner_->ComputeEdges(observations_[0], &edges);
     ROS_INFO("LTM Node: Number of edges in model: %d", int(edges.size()));
     vector<vector<EdgeParams>> edge_params;

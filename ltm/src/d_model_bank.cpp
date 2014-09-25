@@ -16,6 +16,8 @@
 #include <set>
 #include <queue>
 
+#include <boost/lexical_cast.hpp>
+
 // Multiplier for edge costs to avoid working with floating point numbers.
 const double kCostMultiplier = 1e3;
 // Error tolerance for comparing goal point locations.
@@ -353,7 +355,14 @@ void DModelBank::TFCallback(geometry_msgs::PoseArray dmodel_points)
     geometry_msgs::Pose p = dmodel_points.poses[ii];
     transform.setOrigin(tf::Vector3(p.position.x, p.position.y, p.position.z) );
     transform.setRotation(tf::Quaternion(p.orientation.x, p.orientation.y, p.orientation.z, p.orientation.w));
-    string child_frame_id = to_string(ii);
+    string child_frame_id = boost::lexical_cast<string>(ii);
+    /*
+    ROS_INFO("Child: %s", child_frame_id.c_str());
+    ROS_INFO("Parent: %s", reference_frame_.c_str());
+    ROS_INFO("Publishing transform from %s to %s", reference_frame_.c_str(), child_frame_id.c_str());
+    ROS_INFO("Rotation: %f %f %f %f", transform.getRotation().x(), transform.getRotation().y(), transform.getRotation().z(), transform.getRotation().w());
+    ROS_INFO("Translation: %f %f %f", transform.getOrigin().x(), transform.getOrigin().y(), transform.getOrigin().z());
+    */
     tf_br_.sendTransform(tf::StampedTransform(transform, ros::Time::now(), reference_frame_.c_str(), child_frame_id.c_str()));
 
     // Skip the grasp points 

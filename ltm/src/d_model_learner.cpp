@@ -400,8 +400,8 @@ void DModelLearner::ComputeEdges(const geometry_msgs::PoseArray& pose_array, vec
     for (size_t jj = 0; jj < idxs.size(); ++jj)
     {
       // TODO: Do distance checking if using knn search instead of radius search.
-      // No self loops
-      if (int(ii) == idxs[jj])
+      // No self loops or parallel edges
+      if (int(ii) == idxs[jj] || int(ii) > idxs[jj])
       {
         continue;
       }
@@ -486,8 +486,9 @@ void DModelLearner::GenerateModels(const geometry_msgs::PoseArray& points, const
             tf::pointMsgToTF(points.poses[edges[jj].first].position, p1);
             tf::pointMsgToTF(points.poses[edges[jj].second].position, p2);
             tf::Vector3 edge = p1 - p2;
+            edge.normalize();
             EdgeParams e_params;
-            if (edge.dot(axis) < 0.1)
+            if (fabs(edge.dot(axis)) < 0.1)
             {
               e_params.joint = RIGID;
             }
@@ -498,6 +499,11 @@ void DModelLearner::GenerateModels(const geometry_msgs::PoseArray& points, const
               e_params.normal = candidate_model_bank_->TransformVector(axis, reference_frame_, local_frame);
             }
             (*edge_params)[ii].push_back(e_params);
+          }
+          ROS_INFO("Model %d", ii);
+          for (int jj = 0; jj < num_edges; ++jj)
+          {
+            ROS_INFO("    %d--->%d : %d",edges[jj].first, edges[jj].second, (*edge_params)[ii][jj].joint);
           }
           break;
         }
@@ -517,8 +523,10 @@ void DModelLearner::GenerateModels(const geometry_msgs::PoseArray& points, const
             tf::Vector3 p2_center = axis_point + p2_projection;
             tf::Vector3 p1_arm = p1 - p1_center;
             tf::Vector3 p2_arm = p2 - p2_center;
+            p1_arm.normalize();
+            p2_arm.normalize();
             EdgeParams e_params;
-            if (p1_arm.dot(p2_arm) < 0.9)
+            if (fabs(p1_arm.dot(p2_arm)) < 0.9)
             {
               e_params.joint = RIGID;
             }
@@ -530,6 +538,11 @@ void DModelLearner::GenerateModels(const geometry_msgs::PoseArray& points, const
               e_params.center = candidate_model_bank_->TransformPoint(axis_point, reference_frame_, local_frame);
             }
             (*edge_params)[ii].push_back(e_params);
+          }
+          ROS_INFO("Model %d", ii);
+          for (int jj = 0; jj < num_edges; ++jj)
+          {
+            ROS_INFO("    %d--->%d : %d",edges[jj].first, edges[jj].second, (*edge_params)[ii][jj].joint);
           }
           break;
         }
