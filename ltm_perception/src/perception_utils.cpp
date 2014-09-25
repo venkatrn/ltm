@@ -81,6 +81,10 @@ void perception_utils::DisplayPlanarRegions (pcl::visualization::PCLVisualizer& 
     viewer.addArrow (pt2, pt1, 1.0, 0, 0, false, id);     
     //viewer.addLine (pt2, pt1, 1.0, 0, 0, id);                                    //viewer.setShapeRenderingProperties (pcl::visualization::PCL_VISUALIZER_LINE_WIDTH, 5, id);
     contour->points = regions[i].getContour();
+    if (contour->size() == 0)
+    {
+      continue;
+    }
 
     id = std::string("normal_") + boost::lexical_cast<string>(i);
     pcl::visualization::PointCloudColorHandlerCustom <PointT> color (contour, red[i%6], grn[i%6], blu[i%6]);           

@@ -1,5 +1,5 @@
-/**
- * @file lao_robot_ltm.cpp
+/*
+* @file lao_robot_ltm.cpp
  * @author Venkatraman Narayanan
  * Carnegie Mellon University, 2014
  */
@@ -7,6 +7,7 @@
 #include <ltm_ros/lao_robot_ltm.h>
 #include <ltm/d_model_bank.h>
 #include <ltm/d_model_utils.h>
+#include <ltm/kinematic_models/abstract_kinematic_model.h>
 
 #include <pcl/kdtree/kdtree_flann.h>
 
@@ -132,6 +133,7 @@ void LAORobotLTM::LearnCB(const std_msgs::Int32ConstPtr& learning_mode)
     learner_->ComputeEdges(observations_[0], &edges);
     ROS_INFO("LTM Node: Number of edges in model: %d", int(edges.size()));
     vector<vector<EdgeParams>> edge_params;
+    /*
     edge_params.resize(1);
     for (int jj = 0; jj < edge_params.size(); ++jj)
     {
@@ -144,6 +146,10 @@ void LAORobotLTM::LearnCB(const std_msgs::Int32ConstPtr& learning_mode)
         edge_params[jj].push_back(e_params);
       }
     }
+    */
+    vector<AbstractKinematicModel*> kinematic_models;
+    learner_->PlanesToKinematicModels(rectangles_, &kinematic_models);
+    learner_->GenerateModels(d_model_bank_->GetDModelPoints(), edges, kinematic_models, &edge_params);
     num_models_ = edge_params.size();
     d_model_bank_->InitFromObs(edges, edge_params); 
     ROS_INFO("LTM Node: Initialized model from live observation\n");
@@ -329,6 +335,7 @@ void LAORobotLTM::TrajExecCB(const std_msgs::Int32ConstPtr& exec_mode_ptr)
 
 void LAORobotLTM::PerceptionCB(const ltm_msgs::PolygonArrayStamped& rectangles)
 {
+  rectangles_ = rectangles;
   for (int ii = 0; ii < rectangles.polygons.size(); ++ii)
   {
     string id = "polygon" + boost::lexical_cast<string>(ii);

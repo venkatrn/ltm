@@ -31,6 +31,7 @@ struct EdgeParams
 {
   JointType joint;
   tf::Vector3 normal;
+  tf::Vector3 center;
   double rad;
 
   EdgeParams()
@@ -38,10 +39,20 @@ struct EdgeParams
     joint = RIGID;
     rad = 0.0;
   }
+  // Prismatic
   EdgeParams(JointType jt, tf::Vector3 dir, double r)
   {
     joint = jt;
     normal = dir;
+    rad = r;
+    center = tf::Vector3(0.0, 0.0, 0.0);
+  }
+  // Revolute
+  EdgeParams(JointType jt, tf::Vector3 dir, tf::Vector3 cen, double r)
+  {
+    joint = jt;
+    normal = dir;
+    center = cen;
     rad = r;
   }
 };

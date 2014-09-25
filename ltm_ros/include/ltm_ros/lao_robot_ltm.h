@@ -72,6 +72,9 @@ class LAORobotLTM
     // Tracking points/ar markers
     bool ar_marker_tracking_;
     std::vector<geometry_msgs::PoseArray> observations_;
+    // Store the last observed set of rectangles, output by the perception system
+    ltm_msgs::PolygonArrayStamped rectangles_; 
+
     rosbag::Bag bag_;
 
     ros::ServiceClient query_client_;

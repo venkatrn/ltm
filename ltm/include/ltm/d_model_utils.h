@@ -13,7 +13,7 @@
 #include <Eigen/LU>
 
 // Error tolerance for comparing floating point numbers.
-const double kFPTolerance = 1e-3;
+const double kFPTolerance = 1e-3; //1e-3
 
 geometry_msgs::Point Vector3ToPoint(tf::Vector3 v);
 

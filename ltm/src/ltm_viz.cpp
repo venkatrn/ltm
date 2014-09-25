@@ -216,7 +216,7 @@ void LTMViz::VisualizeTraj(const geometry_msgs::PoseArray traj)
   marker.color.b = color.b;
   marker.color.a = color.a;
   marker.lifetime = ros::Duration(100.0);
-  for (int ii = 0; ii < traj.poses.size(); ++ii)
+  for (size_t ii = 0; ii < traj.poses.size(); ++ii)
   {
     marker.points.push_back(traj.poses[ii].position);
   }
@@ -244,7 +244,7 @@ void LTMViz::VisualizePolygon(const geometry_msgs::Polygon poly, std::string nam
   marker.type = visualization_msgs::Marker::LINE_STRIP;
   geometry_msgs::Point p, centroid;
   centroid.x = 0; centroid.y = 0; centroid.z = 0;
-  for (int ii = 0; ii < poly.points.size(); ++ii)
+  for (size_t ii = 0; ii < poly.points.size(); ++ii)
   {
     p.x = poly.points[ii].x;
     p.y = poly.points[ii].y;

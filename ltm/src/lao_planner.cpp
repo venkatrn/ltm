@@ -130,6 +130,11 @@ void LAOPlanner::ReconstructOptimisticPath(std::vector<int>* state_ids, std::vec
     }
     assert(optimistic_succ_id != -1);
 
+    if (current_state.state_id == optimistic_succ_id)
+    {
+      ROS_ERROR("[LAO Planner]: Error in path reconstruction. Optimistic successor has same ID has current state ");
+      return;
+    }
     current_state = PlannerStateMap[optimistic_succ_id];
     //TODO: Check v-values are non-increasing
     state_ids->push_back(current_state.state_id);
@@ -141,7 +146,7 @@ void LAOPlanner::ReconstructOptimisticPath(std::vector<int>* state_ids, std::vec
 
 bool LAOPlanner::Plan(vector<int>* state_ids, vector<int>* fprim_ids)
 {
-  // Plan from scratch
+  // Plan from scratch (assume goal changed)
   PlannerStateMap.clear();
 
   if (model_bank_ == nullptr)

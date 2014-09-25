@@ -93,8 +93,7 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr& original_cloud)
   PointCloudPtr cloud(new PointCloud);
   cloud = original_cloud;
 
-  // Reset the viewer
-  if (pcl_visualization_)
+  if (pcl_visualization_ && original_cloud->size() != 0)
   {
     if (!viewer_->updatePointCloud(original_cloud, "input_cloud"))
     {
@@ -127,13 +126,15 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr& original_cloud)
     GetRectangleCorners(rectangle_proj_points, &corners, axes);
     if (pcl_visualization_)
     {
-      pcl::visualization::PointCloudColorHandlerCustom <PointT> color (contour, 1.0, 0.0, 0.0);           
       string id = boost::lexical_cast<string>(ii);
+      /*
+      pcl::visualization::PointCloudColorHandlerCustom <PointT> color (contour, 1.0, 0.0, 0.0);           
       if (!viewer_->updatePointCloud(rectangle_proj_points, color, string("rect_cloud_")+id))
       {
         viewer_->addPointCloud(rectangle_proj_points, color, string("rect_cloud")+id);
       }
       viewer_->setPointCloudRenderingProperties (pcl::visualization::PCL_VISUALIZER_POINT_SIZE, 5, string("rect_cloud")+id);                 
+      */
       DrawRectangle(*viewer_, corners, id); 
     }
 

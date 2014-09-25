@@ -30,6 +30,10 @@ include_directories(${Eigen_INCLUDE_DIRS})
 
 #common commands for building c++ executables and libraries
 rosbuild_add_library(${PROJECT_NAME}
+                    src/kinematic_models/abstract_kinematic_model.cpp
+                    src/kinematic_models/prismatic_model.cpp
+                    src/kinematic_models/revolute_model.cpp
+                    src/kinematic_models/spherical_model.cpp
                     src/d_model.cpp
                     src/d_model_bank.cpp
                     src/d_model_utils.cpp

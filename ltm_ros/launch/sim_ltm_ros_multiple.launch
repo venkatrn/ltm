@@ -1,6 +1,10 @@
 <launch>
   <master auto="start"/>
   <param name="/use_sim_time" value="true"/>
+
+  <arg name="debug" default="false" />
+  <arg unless="$(arg debug)" name="launch_prefix" value="" />
+  <arg     if="$(arg debug)" name="launch_prefix" value="gdb --ex run --args" />
   <!--<include file="$(find pr2_description)/robots/upload_pr2.launch" />-->
   <!--<param name="robot_description" command="$(find xacro)/xacro.py '$(find pr2_description)/robots/pr2.urdf.xacro'" />-->
 
@@ -8,15 +12,15 @@
   <include file="$(find pr2_arm_kinematics)/launch/pr2_ik_rarm_node.launch"/>
 
   <!--<node pkg="ltm_ros" type="ltm_ros_node" name="ltm_ros" output="screen" launch-prefix="gdb -ex run -args">-->
-    <node pkg="ltm_ros" type="ltm_ros_node" name="ltm_ros" output="screen">
+    <node pkg="ltm_ros" type="ltm_ros_node" name="ltm_ros" output="screen" launch-prefix="$(arg launch_prefix)" respawn="false">
       <param name="use_model_file" value="true"/>
       <param name="obs_file" value="$(find ltm_ros)/data/observations.txt"/> 
       <param name="bag_file" value="$(find ltm_ros)/data/observations.bag"/> 
 
       <!-- This is only for dmodel_bank-->
-      <!--
       <rosparam param="model_files" subst_value="True">
-        [$(find ltm)/matlab/models/door.mdl]
+        <!--[$(find ltm)/matlab/models/door.mdl]-->
+        [$(find ltm)/matlab/models/ball_joint.mdl]
       </rosparam>
       <rosparam param="model_offsets_x">
         [1.65]
@@ -27,8 +31,7 @@
       <rosparam param="model_offsets_z">
         [1.0]
       </rosparam>
-      -->
-
+<!--
       <rosparam param="model_files" subst_value="True">
         [$(find ltm)/matlab/models/door.mdl,
         $(find ltm)/matlab/models/door_rigid.mdl]
@@ -42,9 +45,11 @@
       <rosparam param="model_offsets_z">
         [1.0,1.0]
       </rosparam>
+      -->
+
 
       <param name="fprims_file" value="$(find ltm)/matlab/fprims/sphere_20.fprim"/>
-      <!--<param name="fprims_file" value="$(find ltm)/matlab/fprims/circle_40.fprim"/>-->
+      <!--<param name="fprims_file" value="$(find ltm)/matlab/fprims/linear_4.fprim"/>-->
 
       <!--
     <param name="model_file" value="$(find ltm)/matlab/models/drawer_small.mdl"/>

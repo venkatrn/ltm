@@ -1,0 +1,25 @@
+<launch>
+
+  <include file="$(find pr2_gazebo)/launch/pr2_empty_world.launch"/>
+  <!--<include file="/opt/ros/groovy/stacks/pr2_simulator/pr2_gazebo/pr2_empty_world.launch" /> -->
+
+  <!-- include file="$(find sbpl_arm_planner_node)/launch/world.launch" /-->
+
+  <!-- load perception -->
+  <include file="$(find pr2_arm_navigation_perception)/launch/laser-perception.launch"/>
+
+  <!-- load move_arm -->
+  <!-- include file="$(find pr2_arm_navigation_actions)/launch/move_left_arm.launch"/ -->
+  <include file="$(find pr2_arm_navigation_actions)/launch/move_right_arm.launch"/>
+
+  <!-- load planning_environment -->
+  <include file="$(find planning_environment)/launch/environment_server.launch"/>
+
+  <!-- load filters -->
+  <include file="$(find pr2_arm_navigation_filtering)/launch/trajectory_filter.launch"/>
+
+  <!-- load ik -->
+  <!-- include file="$(find pr2_arm_navigation_kinematics)/launch/left_arm_collision_free_ik.launch"/ -->
+  <!-- include file="$(find pr2_arm_navigation_kinematics)/launch/right_arm_collision_free_ik.launch"/ -->
+
+</launch>

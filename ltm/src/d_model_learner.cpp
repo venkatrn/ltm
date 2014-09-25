@@ -5,6 +5,10 @@
  */
 
 #include <ltm/d_model_learner.h>
+#include <ltm/kinematic_models/abstract_kinematic_model.h>
+#include <ltm/kinematic_models/prismatic_model.h>
+#include <ltm/kinematic_models/revolute_model.h>
+#include <ltm/kinematic_models/spherical_model.h>
 #include <ros/console.h>
 #include <cassert>
 #include <string>
@@ -32,6 +36,14 @@ DModelLearner::DModelLearner(const string& reference_frame)
 DModelLearner::~DModelLearner()
 {
   // DModelLearner does not own the model_bank
+  // Free up the learnt models 
+  for (int ii = 0; ii < learnt_models_.size(); ++ii)
+  {
+    if (learnt_models_[ii] != nullptr)
+    {
+      delete learnt_models_[ii];
+    }
+  }
 }
 
 void DModelLearner::SetModelBank(DModelBank* const model_bank)
@@ -389,7 +401,7 @@ void DModelLearner::ComputeEdges(const geometry_msgs::PoseArray& pose_array, vec
     {
       // TODO: Do distance checking if using knn search instead of radius search.
       // No self loops
-      if (ii == idxs[jj])
+      if (int(ii) == idxs[jj])
       {
         continue;
       }
@@ -397,4 +409,138 @@ void DModelLearner::ComputeEdges(const geometry_msgs::PoseArray& pose_array, vec
     }
   }
   return;
+}
+
+void DModelLearner::PlanesToKinematicModels(const ltm_msgs::PolygonArrayStamped polygons , vector<AbstractKinematicModel*>* kinematic_models)
+{
+  const int num_polygons = polygons.polygons.size();
+  kinematic_models->clear();
+  for (int ii = 0; ii < num_polygons; ++ii)
+  {
+    geometry_msgs::Polygon polygon = polygons.polygons[ii];
+    if(polygon.points.size() != 5)
+    {
+      ROS_ERROR("[DModelLearner]: Can only support rectangles for now");
+      return;
+    }
+    vector<tf::Point> points;
+    points.resize(4);
+    for (int jj = 0; jj < 4; ++jj)
+    {
+      geometry_msgs::Point p;
+      p.x = polygon.points[jj].x;
+      p.y = polygon.points[jj].y;
+      p.z = polygon.points[jj].z;
+      tf::pointMsgToTF(p, points[jj]);
+    }
+    vector<tf::Vector3> axes;
+    axes.push_back(points[1] - points[0]);
+    axes.push_back(points[2] - points[1]);
+    // 4 revolute models (one for each side of the rectangle) + 1 prismatic model (normal to the rectangle)
+    for (int jj = 0; jj < 4; ++jj)
+    {
+      RevoluteModel* revolute_model = new RevoluteModel(reference_frame_, axes[jj%2], points[jj]);
+      learnt_models_.push_back(revolute_model);
+      kinematic_models->push_back(revolute_model);
+    }
+    tf::Vector3 normal = axes[1].cross(axes[0]);
+    normal.normalize();
+    PrismaticModel* prismatic_model = new PrismaticModel(reference_frame_, normal);
+    learnt_models_.push_back(prismatic_model);
+    kinematic_models->push_back(prismatic_model);
+  }
+}
+
+void DModelLearner::GenerateModels(const geometry_msgs::PoseArray& points, const std::vector<Edge>& edges, const std::vector<AbstractKinematicModel*>& kinematic_models, std::vector<std::vector<EdgeParams>>* edge_params)
+{
+  edge_params->clear();
+  const int num_edges = edges.size(); 
+  if (num_edges == 0)
+  {
+    ROS_WARN("[DModel Learner]: No edges in the model");
+    return;
+  }
+  const int num_models = kinematic_models.size();
+  if (num_models == 0)
+  {
+    ROS_WARN("[DModel Learner]: No kinematic models available to compute edge parameteres");
+    return;
+  }
+  edge_params->resize(num_models);
+  // Make sure tf is available, so that we can set the model params in the local frames
+  candidate_model_bank_->TFCallback(points);
+
+  for (int ii = 0; ii < num_models; ++ii)
+  {
+    const AbstractKinematicModel* kinematic_model = kinematic_models[ii];
+    JointType joint_type = kinematic_model->joint_type();
+    switch(joint_type)
+    {
+      case PRISMATIC:
+        {
+          const PrismaticModel* prismatic_model = dynamic_cast<const PrismaticModel*>(kinematic_model);
+          tf::Vector3 axis = prismatic_model->axis();
+          for (int jj = 0; jj < num_edges; ++jj)
+          {
+            tf::Point p1, p2;
+            tf::pointMsgToTF(points.poses[edges[jj].first].position, p1);
+            tf::pointMsgToTF(points.poses[edges[jj].second].position, p2);
+            tf::Vector3 edge = p1 - p2;
+            EdgeParams e_params;
+            if (edge.dot(axis) < 0.1)
+            {
+              e_params.joint = RIGID;
+            }
+            else
+            {
+              string local_frame = to_string(edges[jj].first);
+              e_params.joint = PRISMATIC;
+              e_params.normal = candidate_model_bank_->TransformVector(axis, reference_frame_, local_frame);
+            }
+            (*edge_params)[ii].push_back(e_params);
+          }
+          break;
+        }
+      case REVOLUTE:
+        {
+          const RevoluteModel* revolute_model = dynamic_cast<const RevoluteModel*>(kinematic_model);
+          tf::Vector3 axis = revolute_model->axis();
+          tf::Vector3 axis_point = revolute_model->axis_point();
+          for (int jj = 0; jj < num_edges; ++jj)
+          {
+            tf::Point p1, p2;
+            tf::pointMsgToTF(points.poses[edges[jj].first].position, p1);
+            tf::pointMsgToTF(points.poses[edges[jj].second].position, p2);
+            tf::Vector3 p1_projection = p1.dot(axis) * axis;
+            tf::Vector3 p2_projection = p2.dot(axis) * axis;
+            tf::Vector3 p1_center = axis_point + p1_projection;
+            tf::Vector3 p2_center = axis_point + p2_projection;
+            tf::Vector3 p1_arm = p1 - p1_center;
+            tf::Vector3 p2_arm = p2 - p2_center;
+            EdgeParams e_params;
+            if (p1_arm.dot(p2_arm) < 0.9)
+            {
+              e_params.joint = RIGID;
+            }
+            else
+            {
+              string local_frame = to_string(edges[jj].first);
+              e_params.joint = REVOLUTE;
+              e_params.normal = candidate_model_bank_->TransformVector(axis, reference_frame_, local_frame);
+              e_params.center = candidate_model_bank_->TransformPoint(axis_point, reference_frame_, local_frame);
+            }
+            (*edge_params)[ii].push_back(e_params);
+          }
+          break;
+        }
+      case SPHERICAL:
+        {
+          const SphericalModel* spherical_model = dynamic_cast<const SphericalModel*>(kinematic_model);
+          //TODO: Implement
+          break;
+        }
+      default:
+        ROS_INFO("[DModelLearner]: Unsupported model type in autogeneration of models");
+    }
+  }
 }

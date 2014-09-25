@@ -23,6 +23,7 @@ void operator=(const TypeName&)
 #include <tf/LinearMath/Vector3.h>
 #include <tf/transform_broadcaster.h>
 #include <tf/transform_listener.h>
+#include <tf/tf.h>
 
 #include <unordered_map>
 #include <vector>
@@ -209,6 +210,12 @@ class DModelBank : public AbstractModelBank
     /**@brief Reset the state mappings**/
     void ResetStateMap();
 
+    /**@brief Transformations**/
+    tf::StampedTransform GetTransform(std::string& from_frame, std::string& to_frame);
+    geometry_msgs::Pose TransformPose(const geometry_msgs::Pose& in_pose, std::string& from_frame, std::string& to_frame);
+    tf::Vector3 TransformVector(const tf::Vector3& in_vec, std::string& from_frame, std::string& to_frame);
+    tf::Point TransformPoint(const tf::Point& in_point, std::string& from_frame, std::string& to_frame);
+
     /**@brief Accessors**/
     int num_models() const {return num_models_;}
     double sim_time_step() const {return env_cfg_.sim_time_step;}
@@ -296,6 +303,7 @@ class DModelBank : public AbstractModelBank
 
     /**@brief Visualize internal state**/
     void VisualizeInternalState(int model_id, int internal_state_id);
+
 
     DISALLOW_COPY_AND_ASSIGN(DModelBank);
 };

@@ -5,6 +5,9 @@
  */
 
 #include <ltm/d_model_bank.h>
+#include <ltm/kinematic_models/prismatic_model.h>
+#include <ltm/kinematic_models/revolute_model.h>
+#include <ltm/kinematic_models/spherical_model.h>
 #include <Eigen/Core>
 #include <ros/console.h>
 
@@ -16,7 +19,7 @@
 // Multiplier for edge costs to avoid working with floating point numbers.
 const double kCostMultiplier = 1e3;
 // Error tolerance for comparing goal point locations.
-const double kGoalTolerance = 0.25; //0.05, 0.01 for experiments
+const double kGoalTolerance = 0.1; //0.05, 0.01 for experiments //0.25
 
 using namespace std;
 
@@ -329,22 +332,22 @@ void DModelBank::TFTimedCallback(const ros::TimerEvent& event)
 void DModelBank::TFCallback(geometry_msgs::PoseArray dmodel_points)
 {
   /*
-  for (auto it = edge_map_->begin(); it != edge_map_->end(); ++it)
+     for (auto it = edge_map_->begin(); it != edge_map_->end(); ++it)
+     {
+  // Skip edges involving grasp point
+  if (find(grasp_idxs_.begin(), grasp_idxs_.end(), it->first.first) != grasp_idxs_.end()
+  || find(grasp_idxs_.begin(), grasp_idxs_.end(), it->first.second) != grasp_idxs_.end())
   {
-    // Skip edges involving grasp point
-    if (find(grasp_idxs_.begin(), grasp_idxs_.end(), it->first.first) != grasp_idxs_.end()
-        || find(grasp_idxs_.begin(), grasp_idxs_.end(), it->first.second) != grasp_idxs_.end())
-    {
-      continue;
-    }
-    edges.points.push_back(dmodel_points.poses[it->first.first].position);
-    edges.points.push_back(dmodel_points.poses[it->first.second].position);
+  continue;
+  }
+  edges.points.push_back(dmodel_points.poses[it->first.first].position);
+  edges.points.push_back(dmodel_points.poses[it->first.second].position);
   }
   */
 
   tf::Transform transform;
 
-  for (size_t ii = 0; ii < points_.poses.size(); ++ii)
+  for (size_t ii = 0; ii < dmodel_points.poses.size(); ++ii)
   {
     static tf::TransformBroadcaster tf_br_;
     geometry_msgs::Pose p = dmodel_points.poses[ii];
@@ -459,14 +462,12 @@ void DModelBank::GetNextState(int model_id, const geometry_msgs::PoseArray& in_p
   tf::Vector3 normal;
   ExtractIndices(model_id, p_idx, &component_idxs, &sep_idxs, &joint_type, &normal);
 
+
+  // DEBUG
   /*
      printf("Rigid component has %d points. Joint type is %d and param vector is %0.2f %0.2f %0.2f\n",
      (int)component_idxs.size(), static_cast<int>(joint_type), normal.x(), 
      normal.y(), normal.z());
-     */
-
-  // DEBUG
-  /*
      printf("Cluster indices:\n");
      for (size_t ii = 0; ii < component_idxs.size(); ++ii)
      {
@@ -498,6 +499,9 @@ void DModelBank::GetNextState(int model_id, const geometry_msgs::PoseArray& in_p
     }
   }
 
+  // Must set up transforms for current state of points
+  TFCallback(in_points);
+
   if (joint_type == RIGID)
   {
     //TODO: Assumes unit mass for all points
@@ -510,177 +514,49 @@ void DModelBank::GetNextState(int model_id, const geometry_msgs::PoseArray& in_p
       out_points->poses[component_idxs[ii]].position.z = out_points->poses[component_idxs[ii]].position.z + displacement.z();
     }
   }
-  else if (joint_type == PRISMATIC)
+  else
   {
-    //TODO: Assumes unit mass for all points
-    double mass = 1.0;
-    tf::Stamped<tf::Vector3> transformed_force;
-    tf::Stamped<tf::Vector3> ref_force(force, ros::Time::now(), reference_frame_);
     string target_frame = to_string(closest_p_idx);
-    // Transform force in reference frame to target frame
-    listener_.transformVector(target_frame.c_str(), ros::Time(0), ref_force, reference_frame_.c_str(), transformed_force);
-    // Project the force onto the constraint direction
-    double projection = normal.x()*transformed_force.x() + normal.y()*transformed_force.y() + normal.z()*transformed_force.z();
-    tf::Vector3 projected_vector(projection*normal.x(), projection*normal.y(), projection*normal.z());
-    // Transform back the projected force to reference frame
-    tf::Stamped<tf::Vector3> projected_force(projected_vector, ros::Time::now(), target_frame);
-    listener_.transformVector(reference_frame_.c_str(), ros::Time(0), projected_force, target_frame.c_str(), transformed_force);
-
-    tf::Vector3 displacement = 0.5*Sqr(del_t)*transformed_force/mass;
-
-    for (size_t ii = 0; ii < component_idxs.size(); ++ii)
-    {
-      out_points->poses[component_idxs[ii]].position.x = out_points->poses[component_idxs[ii]].position.x + displacement.x();
-      out_points->poses[component_idxs[ii]].position.y = out_points->poses[component_idxs[ii]].position.y + displacement.y();
-      out_points->poses[component_idxs[ii]].position.z = out_points->poses[component_idxs[ii]].position.z + displacement.z();
-    }
-  }
-  else if (joint_type == REVOLUTE)
-  {
-    //TODO: Assumes unit inertia for the rigid body
-    double inertia = 1.0;
-    tf::Stamped<tf::Vector3> transformed_force;
-    tf::Stamped<tf::Vector3> ref_force(force, ros::Time::now(), reference_frame_);
-    string target_frame = to_string(closest_p_idx);
-    // Transform force in reference frame to target frame
-    bool transformed = false;
-    while (!transformed)
-    {
-      try
-      {
-        listener_.transformVector(target_frame.c_str(), ros::Time(0), ref_force, reference_frame_.c_str(), transformed_force);
-      }
-      catch (tf::LookupException)
-      { 
-        continue;
-      }
-      transformed = true;
-    }
-    // Do all computations in reference frame
-    // Moment center and arm
+    tf::Vector3 transformed_force = TransformVector(force, reference_frame_, target_frame);
+    // TODO: The following three lines will go as soon as the EdgeParam is updated to hold the center and axis in local frames
     tf::Vector3 center(out_points->poses[closest_p_idx].position.x, out_points->poses[closest_p_idx].position.y, out_points->poses[closest_p_idx].position.z);
-    tf::Vector3 p_applied(out_points->poses[p_idx].position.x, out_points->poses[p_idx].position.y, out_points->poses[p_idx].position.z);
-    //TODO: This is a hack
-    //tf::Vector3 arm = p_applied - center;
-    tf::Vector3 arm = tf::Vector3(p_applied.x() - center.x(), p_applied.y() - center.y(), 0.0);
+    center = TransformPoint(tf::Point(center.x(), center.y(), center.z()), reference_frame_, target_frame);
+    normal = TransformVector(normal, reference_frame_, target_frame);
 
-    // Project the force onto the tangent direction
-    tf::Vector3 tangent = Cross(normal, arm);
-    //double projection = tangent.x()*transformed_force.x() + tangent.y()*transformed_force.y() + tangent.z()*transformed_force.z();
-    double projection = tangent.x()*ref_force.x() + tangent.y()*ref_force.y() + tangent.z()*ref_force.z();
-    tangent = tangent / Norm(tangent);
-    tf::Vector3 projected_vector(projection*tangent.x(), projection*tangent.y(), projection*tangent.z());
-    tf::Vector3 torque = Cross(arm, projected_vector);
-    double torque_norm = sqrt(Sqr(torque.x()) + Sqr(torque.y()) + Sqr(torque.z()));
-    double theta = 0.5*Sqr(del_t)*torque_norm/inertia;
-
-    /*
-       printf("Arm: %f %f %f\n", arm.x(), arm.y(), arm.z());
-       printf("Normal: %f %f %f\n", normal.x(), normal.y(), normal.z());
-       printf("Tangent: %f %f %f\n", tangent.x(), tangent.y(), tangent.z());
-       printf("Projected vector: %f %f %f\n", projected_vector.x(), projected_vector.y(), projected_vector.z());
-       printf("Torque: %f %f %f\n", torque.x(), torque.y(), torque.z());
-       printf("Theta: %f\n", theta);
-       */
-
-    tf::Quaternion quat;
-    // Return
-    if (torque_norm < 1e-5) 
+    // Set up the kinematics model
+    AbstractKinematicModel* kinematic_model;
+    switch(joint_type)
     {
-      return;
-      ROS_ERROR("Applied torque is zero - dividing by zero\n");
+      case PRISMATIC:
+        {
+          kinematic_model = new PrismaticModel(target_frame, normal);
+          break;
+        }
+      case REVOLUTE:
+        {
+          kinematic_model = new RevoluteModel(target_frame, normal, center);
+          break;
+        }
+      case SPHERICAL:
+        {
+          kinematic_model = new SphericalModel(target_frame, center);
+          break;
+        }
+      default:
+        ROS_ERROR("Flow should have never got here");
     }
-    quat.setRotation(torque/torque_norm, theta);
-    tf::Transform tr = tf::Transform(quat);
+    assert(kinematic_model != nullptr);
 
     for (size_t ii = 0; ii < component_idxs.size(); ++ii)
     {
-      geometry_msgs::Point p = out_points->poses[component_idxs[ii]].position;
-      geometry_msgs::Quaternion q = out_points->poses[component_idxs[ii]].orientation;
-      tf::Vector3 point(p.x, p.y, p.z);
-      tf::Vector3 rotated_point = tr*(point-center) + center;
-      out_points->poses[component_idxs[ii]].position.x = rotated_point.x();
-      out_points->poses[component_idxs[ii]].position.y = rotated_point.y();
-      out_points->poses[component_idxs[ii]].position.z = rotated_point.z();
-
-      // Update orientation of the point (the local coordinate frame) by passing it
-      // through the same transformation.
-      tf::Quaternion original_quat(q.x, q.y, q.z, q.w);
-      tf::Quaternion rotated_quat = quat * original_quat;
-      out_points->poses[component_idxs[ii]].orientation.x = double(rotated_quat.x());
-      out_points->poses[component_idxs[ii]].orientation.y = double(rotated_quat.y());
-      out_points->poses[component_idxs[ii]].orientation.z = double(rotated_quat.z());
-      out_points->poses[component_idxs[ii]].orientation.w = double(rotated_quat.w());
+      geometry_msgs::Pose pose = out_points->poses[component_idxs[ii]];
+      // Transform pose to target frame before applying the kinematics forward model
+      geometry_msgs::Pose transformed_pose = TransformPose(pose, reference_frame_, target_frame);
+      geometry_msgs::Pose new_pose = kinematic_model->Transform(transformed_pose, transformed_force, del_t);
+      // Transform back to reference frame
+      out_points->poses[component_idxs[ii]] = TransformPose(new_pose, target_frame, reference_frame_);
     }
-  }
-  else if (joint_type == SPHERICAL)
-  {
-    //TODO: Assumes unit inertia for the rigid body
-    double inertia = 1.0;
-    tf::Stamped<tf::Vector3> transformed_force;
-    tf::Stamped<tf::Vector3> ref_force(force, ros::Time::now(), reference_frame_);
-    string target_frame = to_string(closest_p_idx);
-    // Transform force in reference frame to target frame
-    bool transformed = false;
-    while (!transformed)
-    {
-      try
-      {
-        listener_.transformVector(target_frame.c_str(), ros::Time(0), ref_force, reference_frame_.c_str(), transformed_force);
-      }
-      catch (tf::LookupException)
-      { 
-        continue;
-      }
-      transformed = true;
-    }
-    // Do all computations in reference frame
-    // Moment center and arm
-    tf::Vector3 center(out_points->poses[closest_p_idx].position.x, out_points->poses[closest_p_idx].position.y, out_points->poses[closest_p_idx].position.z);
-    tf::Vector3 p_applied(out_points->poses[p_idx].position.x, out_points->poses[p_idx].position.y, out_points->poses[p_idx].position.z);
-    tf::Vector3 arm = p_applied - center;
-
-    tf::Vector3 torque = Cross(arm, tf::Vector3(transformed_force.x(), transformed_force.y(), transformed_force.z()));
-    tf::Vector3 omega = 0.5 * Sqr(del_t) * torque;
-    double theta = sqrt(Sqr(omega.x()) + Sqr(omega.y()) + Sqr(omega.z()));
-
-    /*
-       printf("Arm: %f %f %f\n", arm.x(), arm.y(), arm.z());
-       printf("Normal: %f %f %f\n", normal.x(), normal.y(), normal.z());
-       printf("Torque: %f %f %f\n", torque.x(), torque.y(), torque.z());
-       printf("Theta: %f\n", theta);
-       */
-
-    tf::Quaternion quat;
-    // Return
-    if (theta < 1e-5) 
-    {
-      return;
-      ROS_ERROR("Omega norm is zero - dividing by zero\n");
-    }
-    quat.setRotation(omega/theta, theta);
-    tf::Transform tr = tf::Transform(quat);
-
-    for (size_t ii = 0; ii < component_idxs.size(); ++ii)
-    {
-      geometry_msgs::Point p = out_points->poses[component_idxs[ii]].position;
-      geometry_msgs::Quaternion q = out_points->poses[component_idxs[ii]].orientation;
-      tf::Vector3 point(p.x, p.y, p.z);
-      tf::Vector3 rotated_point = tr*(point-center) + center;
-      out_points->poses[component_idxs[ii]].position.x = rotated_point.x();
-      out_points->poses[component_idxs[ii]].position.y = rotated_point.y();
-      out_points->poses[component_idxs[ii]].position.z = rotated_point.z();
-
-      // Update orientation of the point (the local coordinate frame) by passing it
-      // through the same transformation.
-      tf::Quaternion original_quat(q.x, q.y, q.z, q.w);
-      tf::Quaternion rotated_quat = quat * original_quat;
-      out_points->poses[component_idxs[ii]].orientation.x = double(rotated_quat.x());
-      out_points->poses[component_idxs[ii]].orientation.y = double(rotated_quat.y());
-      out_points->poses[component_idxs[ii]].orientation.z = double(rotated_quat.z());
-      out_points->poses[component_idxs[ii]].orientation.w = double(rotated_quat.w());
-    }
-
+    delete kinematic_model;
   }
   return;
 }
@@ -944,6 +820,19 @@ void DModelBank::GetSuccs(int model_id, int source_state_id, vector<int>* succs,
     tf::Vector3 force = force_primitives_[jj];
     GetNextState(model_id, in_points, source_state.grasp_idx, force, env_cfg_.sim_time_step, &out_points);
 
+    // DEBUG
+    /*
+    if (source_state_id == 0)
+    {
+      for (int kk = 0; kk < out_points.poses.size(); ++kk)
+      {
+        ROS_INFO("%f %f %f", out_points.poses[kk].position.x,
+            out_points.poses[kk].position.y,
+            out_points.poses[kk].position.z);
+      }
+    }
+    */
+
     // Determine points that have changed and generate succ state accordingly.
     State_t succ_state;
     succ_state.grasp_idx = source_state.grasp_idx;
@@ -959,7 +848,7 @@ void DModelBank::GetSuccs(int model_id, int source_state_id, vector<int>* succs,
     }
 
     // DEBUG
-    // printf("Number of changed points: %d\n", int(succ_state.changed_inds.size()));
+    // ROS_INFO("Number of changed points: %d", int(succ_state.changed_inds.size()));
 
     int succ_id = StateToStateID(succ_state);
 
@@ -990,6 +879,14 @@ void DModelBank::GetSuccs(int model_id, int source_state_id, vector<int>* succs,
     edge_ids->push_back(FPrimToFPrimID(succ_state.grasp_idx, force_primitives_.size() - 1));
     costs->push_back(int(1 * kCostMultiplier * env_cfg_.sim_time_step));
   }
+  // Debug
+  /*
+  ROS_INFO("Successors for state %d:", source_state_id);
+  for (int ii = 0; ii < succs->size(); ++ii)
+  {
+    ROS_INFO("    %d", (*succs)[ii]);
+  }
+  */
   return;
 }
 
@@ -1099,7 +996,7 @@ void DModelBank::SetStartState(BeliefState_t start_state)
   int start_state_id = BeliefStateToStateID(start_state);
   if (start_state_id == env_cfg_.start_state_id)
   {
-    ROS_DEBUG("DModelBank: Start belief state to be set is same as previous start belief state"); 
+    ROS_INFO("DModelBank: Start belief state to be set is same as previous start belief state"); 
     return;
   }
   ROS_INFO("DModelBank: Setting start state: %d\n", start_state_id);
@@ -1112,7 +1009,7 @@ void DModelBank::SetInternalStartState(State_t start_state)
   int start_state_id = StateToStateID(start_state);
   if (start_state_id == env_cfg_.internal_start_state_id)
   {
-    ROS_DEBUG("DModelBank: Start state to be set is same as previous start state"); 
+    ROS_INFO("DModelBank: Start state to be set is same as previous start state"); 
     return;
   }
   ROS_INFO("DModelBank: Setting internal start state: %d\n", start_state_id);
@@ -1214,6 +1111,50 @@ bool DModelBank::GetEndEffectorTrajFromStateIDs(const std::vector<int>& state_id
   return true;
 }
 
+// Transforms et al.
+
+tf::StampedTransform DModelBank::GetTransform(std::string& from_frame, std::string& to_frame)
+{
+  tf::StampedTransform transform;
+  try
+  {
+    //NOTE: For some reason, listener_.transformVector doesn't seem to work. This must be debugged later.
+    listener_.lookupTransform(to_frame, from_frame, ros::Time(0), transform);
+  }
+  catch (tf::TransformException ex){
+    ROS_ERROR("%s",ex.what());
+    ros::Duration(1.0).sleep();
+  }
+  return transform;
+}
+
+geometry_msgs::Pose DModelBank::TransformPose(const geometry_msgs::Pose& in_pose, std::string& from_frame, std::string& to_frame)
+{
+  geometry_msgs::PoseStamped stamped_in_pose, stamped_out_pose;
+  stamped_in_pose.pose = in_pose;
+  stamped_in_pose.header.frame_id = from_frame;
+  stamped_in_pose.header.stamp = ros::Time(0);
+  listener_.transformPose(to_frame, ros::Time(0), stamped_in_pose, from_frame, stamped_out_pose);
+  return stamped_out_pose.pose;
+}
+
+tf::Vector3 DModelBank::TransformVector(const tf::Vector3& in_vec, std::string& from_frame, std::string& to_frame)
+{
+  tf::Vector3 out_vec;
+  tf::Stamped<tf::Vector3> stamped_in_vec(in_vec, ros::Time(0), from_frame), stamped_out_vec;
+  listener_.transformVector(to_frame, ros::Time(0), stamped_in_vec, from_frame, stamped_out_vec);
+  out_vec = stamped_out_vec;
+  return out_vec;
+}
+
+tf::Point DModelBank::TransformPoint(const tf::Point& in_point, std::string& from_frame, std::string& to_frame)
+{
+  tf::Point out_point;
+  tf::Stamped<tf::Point> stamped_in_point(in_point, ros::Time(0), from_frame), stamped_out_point;
+  listener_.transformPoint(to_frame, ros::Time(0), stamped_in_point, from_frame, stamped_out_point);
+  out_point = stamped_out_point;
+  return out_point;
+}
 
 // Debug utilties
 void DModelBank::PrintPoints()

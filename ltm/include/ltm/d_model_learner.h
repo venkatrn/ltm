@@ -9,6 +9,8 @@
 #include <ltm/d_model_bank.h>
 #include <ltm/d_model_utils.h>
 #include <ltm/ltm_viz.h>
+#include <ltm/kinematic_models/abstract_kinematic_model.h>
+#include <ltm_msgs/PolygonArrayStamped.h>
 
 
 struct Transition
@@ -52,6 +54,10 @@ class DModelLearner
 
     /**@brief Compute edges for a point cloud**/
     void ComputeEdges(const geometry_msgs::PoseArray& points, std::vector<Edge>* edges);
+    /**@brief Generate candidate prismatic and revolute models from a set of planes**/
+    void PlanesToKinematicModels(const ltm_msgs::PolygonArrayStamped polygons, std::vector<AbstractKinematicModel*>* kinematic_models);
+    /**@brief Generate possible models (edge params) for a given set of points and edges**/
+    void GenerateModels(const geometry_msgs::PoseArray& points, const std::vector<Edge>& edges, const std::vector<AbstractKinematicModel*>& kinematic_models, std::vector<std::vector<EdgeParams>>* edge_params);
 
   private:
     int num_hypotheses_; ///< Number of candidate models 
@@ -61,6 +67,9 @@ class DModelLearner
     LTMViz* viz_;
     /// Candidate D-models (DModelBank)
     DModelBank* candidate_model_bank_;
+
+    ///All learnt candidate kinematic models
+    std::vector<AbstractKinematicModel*> learnt_models_;
     /// Compute squared error between two point clouds
     double ComputeSquaredError(const geometry_msgs::PoseArray pts1, const geometry_msgs::PoseArray pts2);
 
