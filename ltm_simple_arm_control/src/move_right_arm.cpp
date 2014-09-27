@@ -44,6 +44,7 @@ ros::Publisher traj_exec_mode_pub;
 
 ros::Subscriber plan_sub;
 bool execute_trajectory = false;
+bool approach_mode = false;
 
 RobotRightArm* r_arm;
 
@@ -234,18 +235,18 @@ void CloseGripper()
 
 void planCB(const geometry_msgs::PoseArrayConstPtr& plan)
 {
-  bool safe_execution = false;
+  bool safe_execution = true;
   // Do nothin if execute trajectory is not on
   if (!execute_trajectory)
   {
     // Fake publish end of execution message
     std_msgs::Int32 traj_exec_mode;
-    traj_exec_mode.data = 1;
+    traj_exec_mode.data = 2; // 2 -> Full trajectory executed
     traj_exec_mode_pub.publish(traj_exec_mode);
     return;
   }
   // Reset execute trajectory to false
-  execute_trajectory = false;
+  // execute_trajectory = false;
 
   if (plan->poses.size() == 0)
   {
@@ -267,38 +268,50 @@ void planCB(const geometry_msgs::PoseArrayConstPtr& plan)
   pose[6] = 0.0;
   getCurrentRightArm(seed);
   if(getRightIK(pose, seed, angles)){
-    moveArmTo(angles);
+  moveArmTo(angles);
   }
   */
 
-  // Open the gripper
-  OpenGripper();
-
-  // Pre-grasp position 
-  pose[0] = plan->poses[0].position.x;
-  pose[1] = plan->poses[0].position.y;
-  pose[2] = plan->poses[0].position.z;
-  pose[3] = plan->poses[0].orientation.w;
-  pose[4] = plan->poses[0].orientation.x;
-  pose[5] = plan->poses[0].orientation.y;
-  pose[6] = plan->poses[0].orientation.z;
-  getCurrentRightArm(seed);
-  if(getRightIK(pose, seed, angles)){
-    moveArmTo(angles);
-  }
-  else if (safe_execution)
+  if (approach_mode)
   {
-    return;
-  }
+    // Open the gripper
+    OpenGripper();
 
-  // Close gripper after reaching grasp pose
-  CloseGripper();
-  // Wait for gripper to close fully
-  sleep(2.0);
+    // Pre-grasp position 
+    pose[0] = plan->poses[0].position.x;
+    pose[1] = plan->poses[0].position.y;
+    pose[2] = plan->poses[0].position.z;
+    pose[3] = plan->poses[0].orientation.w;
+    pose[4] = plan->poses[0].orientation.x;
+    pose[5] = plan->poses[0].orientation.y;
+    pose[6] = plan->poses[0].orientation.z;
+    getCurrentRightArm(seed);
+    if(getRightIK(pose, seed, angles)){
+      moveArmTo(angles);
+    }
+    else if (safe_execution)
+    {
+      return;
+    }
+
+    // Close gripper after reaching grasp pose
+    CloseGripper();
+    // Wait for gripper to close fully
+    sleep(2.0);
+  }
 
   std::vector<std::vector<double>> joint_trajectory;
   getCurrentRightArm(seed);
-  for (size_t ii = 0; ii < plan->poses.size(); ++ii)
+  size_t start_idx;
+  if (approach_mode) 
+  {
+    start_idx = 0;
+  }
+  else
+  {
+    start_idx = 1;
+  }
+  for (size_t ii = start_idx; ii < plan->poses.size(); ++ii)
   {
     pose[0] = plan->poses[ii].position.x;
     pose[1] = plan->poses[ii].position.y;
@@ -313,6 +326,11 @@ void planCB(const geometry_msgs::PoseArrayConstPtr& plan)
       joint_trajectory.push_back(traj_point);
     }
      seed.swap(angles);
+  }
+  // Reset approach mode
+  if (approach_mode)
+  {
+    approach_mode = false;
   }
   
   printf("Joint Trajectory:\n");
@@ -330,7 +348,7 @@ void planCB(const geometry_msgs::PoseArrayConstPtr& plan)
   moveArmAlong(joint_trajectory);
   
   // Open the gripper after executing trajectory
-  OpenGripper();
+  // OpenGripper();
   
   // Publish end of execution message
   std_msgs::Int32 traj_exec_mode;
@@ -374,6 +392,7 @@ void processFeedback( const visualization_msgs::InteractiveMarkerFeedbackConstPt
       ROS_INFO_STREAM( s.str() << ": menu item " << feedback->menu_entry_id << " clicked" << mouse_point_ss.str() << "." );
       if(feedback->menu_entry_id == 1){
         execute_trajectory = true;
+        approach_mode = true;
       	goal_pose.pose.position.x = feedback->pose.position.x;
 	      goal_pose.pose.position.y = feedback->pose.position.y;
 	      goal_pose.pose.position.z = feedback->pose.position.z;
@@ -399,7 +418,9 @@ void processFeedback( const visualization_msgs::InteractiveMarkerFeedbackConstPt
 	      }
       }
       if(feedback->menu_entry_id == 3){
-      	      goal_pose.pose.position.x = feedback->pose.position.x;
+        execute_trajectory = false;
+        approach_mode = true;
+      	goal_pose.pose.position.x = feedback->pose.position.x;
 	      goal_pose.pose.position.y = feedback->pose.position.y;
 	      goal_pose.pose.position.z = feedback->pose.position.z;
 	      goal_pose.pose.orientation.w = feedback->pose.orientation.w;

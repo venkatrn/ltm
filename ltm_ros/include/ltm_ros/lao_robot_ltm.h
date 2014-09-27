@@ -66,12 +66,16 @@ class LAORobotLTM
     int grasp_idx_;
     std::vector<int> grasp_idxs_;
     geometry_msgs::Pose grasp_pose_;
+    std::vector<geometry_msgs::Pose> local_grasp_poses_; //Store the grasp poses in the local frames of the closest/attached points
+    std::vector<int> grasp_attached_idxs_; //Indices of the points to which the grasp points are attached
     State_t start_state_, goal_state_;
     int num_goals_received_; // Keep track of number of goals received--must match number of grasp poses.
+    bool full_trajectory_execution_;
 
     // Tracking points/ar markers
-    bool ar_marker_tracking_;
+    bool ar_marker_tracking_, record_observations_, record_bag_;
     std::vector<geometry_msgs::PoseArray> observations_;
+    geometry_msgs::PoseArray last_observed_pose_;
     // Store the last observed set of rectangles, output by the perception system
     ltm_msgs::PolygonArrayStamped rectangles_; 
 
@@ -127,6 +131,8 @@ class LAORobotLTM
 
     /**@brief Get inverse kinematics for the PR2 right arm**/
     bool GetRightIK(const std::vector<double>& ik_pose, const std::vector<double>& seed, std::vector<double>* angles);
+    /**@brief Get the DModel poses (appended with grasp poses) from AR marker poses**/
+    void ObservationsToModelPoses(const geometry_msgs::PoseArray& observations, geometry_msgs::PoseArray* appended_poses);
 
 };
 #endif /* _LTM_ROS_LAO_ROBOT_LTM_H_ */

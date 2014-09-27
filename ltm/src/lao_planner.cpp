@@ -19,7 +19,7 @@
 
 using namespace std;
 
-const int kMaxPlannerExpansions = 10000;//5000
+const int kMaxPlannerExpansions = 5000;//10000//5000
 
 LAOPlanner::LAOPlanner()
 {
@@ -112,9 +112,9 @@ void LAOPlanner::ReconstructOptimisticPath(std::vector<int>* state_ids, std::vec
   fprim_ids->push_back(current_state.best_action_id);
 
   // Until terminal state is reached
-  while (current_state.best_vec_idx != -1)
+  while (current_state.best_vec_idx != -1 && !model_bank_->IsGoalState(current_state.state_id))
   {
-    ROS_INFO("State: %d", current_state.state_id);
+    ROS_INFO("State: %d, Val: %f", current_state.state_id, current_state.v);
     int best_vec_idx = current_state.best_vec_idx;
     vector<int> succ_state_ids = current_state.succ_state_ids_map[best_vec_idx];
     double min_val = numeric_limits<double>::max();
@@ -138,6 +138,7 @@ void LAOPlanner::ReconstructOptimisticPath(std::vector<int>* state_ids, std::vec
     current_state = PlannerStateMap[optimistic_succ_id];
     //TODO: Check v-values are non-increasing
     state_ids->push_back(current_state.state_id);
+    //TODO: don't push in the fprim for the goal state
     fprim_ids->push_back(current_state.best_action_id);
   }
   ROS_INFO("[LAO Planner]: Path reconstruction successful");
@@ -167,8 +168,9 @@ bool LAOPlanner::Plan(vector<int>* state_ids, vector<int>* fprim_ids)
   {
     if (planner_stats_.expansions > kMaxPlannerExpansions)
     {
-      printf("Planner: Exceeded max expansions\n");
-      return false;
+      ROS_WARN("[LAO Planner]: Exceeded max expansion. Returning optimistic path anyway.");
+      break;
+      //return false;
     }
 
     // Get the DFS traversal of the best partial solution graph
@@ -188,23 +190,18 @@ bool LAOPlanner::Plan(vector<int>* state_ids, vector<int>* fprim_ids)
     // Iterate through and expand state and/or update V-values 
     for (size_t ii = 0; ii < dfs_traversal.size(); ++ii)
     {
-      // Ignore goal states
-      if (model_bank_->IsGoalState(dfs_traversal[ii]))
-      {
-        continue;
-      }
       PlannerState s = StateIDToState(dfs_traversal[ii]);
+      // Ignore goal states
       // TODO: Update this. Search ends if state being expanded is a goal state 
-      /*
-         if (model_bank_->IsGoalState(s.state_id)) 
-         {
-         ROS_INFO("[LAO Planner]: Goal state is found\n");
-         exists_non_terminal_states = false;
-         goal_state_id_ = s.state_id;
-         goal_state = s;
-         break;
-         }
-         */
+      if (model_bank_->IsGoalState(s.state_id))
+      {
+        ROS_INFO("[LAO Planner]: Goal state has been found\n");
+        exists_non_terminal_states = false;
+        goal_state_id_ = s.state_id;
+        goal_state = s;
+        break;
+        //continue;
+      }
 
       // Expand the state if not already expanded
       if (!s.expanded)
@@ -292,9 +289,67 @@ bool LAOPlanner::Plan(vector<int>* state_ids, vector<int>* fprim_ids)
 
   // Reconstruct path
   ROS_INFO("[LAO Planner]: Finished planning");
+  SolutionValueIteration();
+  ROS_INFO("[LAO Planner]: Finished value iteration");
   ReconstructOptimisticPath(state_ids, fprim_ids);
   // PrintPlannerStateMap();
   return true;
+}
+
+void LAOPlanner::SolutionValueIteration()
+{
+  // Get the DFS traversal of the best partial solution graph
+  vector<int> dfs_traversal;
+  DFSTraversal(&dfs_traversal);
+  const int max_iter = 100;
+  const double error_tol = 1e-3;
+  double error = numeric_limits<double>::max();
+  int iter = 0;
+  while (error > error_tol && iter < max_iter)
+  {
+    iter++;
+    error = 0.0;
+    for (size_t ii = 0; ii < dfs_traversal.size(); ++ii)
+    {
+      PlannerState s = StateIDToState(dfs_traversal[ii]);
+      // Update V-values: V(s) = min_{a\in A} c(s,a) + \sum_{s'} P(s'|s,a)*V(s') 
+      const int num_actions = s.succ_state_ids_map.size();
+      assert(num_actions == int(s.succ_state_probabilities_map.size()));
+      assert(num_actions == int(s.action_ids.size()));
+      double min_expected_cost = numeric_limits<double>::max(); 
+      int best_idx = -1;
+      for (int jj = 0; jj < num_actions; ++jj)
+      {
+        const int num_succs = s.succ_state_ids_map[jj].size();
+        assert(num_succs == int(s.succ_state_probabilities_map[jj].size()));
+        double expected_cost = s.action_costs[jj];
+        for (int kk = 0; kk < num_succs; ++kk)
+        {
+          PlannerState succ_state = StateIDToState(s.succ_state_ids_map[jj][kk]);
+          expected_cost += (succ_state.v * s.succ_state_probabilities_map[jj][kk]);
+        }
+        if (expected_cost < min_expected_cost)
+        {
+          min_expected_cost = expected_cost;
+          best_idx = jj;
+        }
+      }
+      if (best_idx == -1) continue; //Ignore terminal states
+      //assert(best_idx != -1);
+      s.best_action_id = s.action_ids[best_idx];
+      s.best_vec_idx = best_idx;
+      error += fabs(s.v - min_expected_cost);
+      s.v = min_expected_cost;
+
+      // Update the state in PlannerStateMap
+      PlannerStateMap[s.state_id] = s;
+    }
+    ROS_INFO("[LAO Planner]: VI Iteration %d, Error: %f", iter, error);
+  }
+  if (iter == max_iter)
+  {
+    ROS_INFO("[LAO Planner]: Value iteration exceeded max_iter limit. Error in V-values is %f", error);
+  }
 }
 
 PlannerStats LAOPlanner::GetPlannerStats()

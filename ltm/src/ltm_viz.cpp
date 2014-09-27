@@ -191,6 +191,40 @@ void LTMViz::VisualizeAxis(const geometry_msgs::Pose axis)
   PublishMarker(marker);
 }
 
+void LTMViz::VisualizeAxis(const tf::Vector3 axis, const tf::Vector3 axis_point)
+{
+
+  const double kArrowLength = 1.0;
+  // Visualize the axis
+  geometry_msgs::Point start_point, end_point;
+  tf::Vector3 end = axis_point + kArrowLength*axis.normalized();
+  start_point.x = axis_point.x();
+  start_point.y = axis_point.y();
+  start_point.z = axis_point.z();
+  end_point.x = end.x();
+  end_point.y = end.y();
+  end_point.z = end.z();
+
+  visualization_msgs::Marker axis_marker;
+  axis_marker.header.frame_id = reference_frame_;
+  axis_marker.header.stamp = ros::Time::now();
+  axis_marker.ns = string("axis") + to_string(rand());
+  axis_marker.action = visualization_msgs::Marker::ADD;
+  axis_marker.id = 0;
+  axis_marker.type = visualization_msgs::Marker::ARROW;
+  axis_marker.points.push_back(start_point);
+  axis_marker.points.push_back(end_point);
+  axis_marker.scale.x = 0.015;
+  axis_marker.scale.y = 0.04;
+  axis_marker.scale.z = 0.04;
+  axis_marker.color.r = 1.0;
+  axis_marker.color.g = 0.0;
+  axis_marker.color.b = 0.0;
+  axis_marker.color.a = 1.0;
+  axis_marker.lifetime = ros::Duration(100.0);
+  PublishMarker(axis_marker);
+}
+
 void LTMViz::VisualizeTraj(const geometry_msgs::PoseArray traj)
 {
   ltm::RGBA color(0.0, 1.0, 0.0, 0.5);

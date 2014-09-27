@@ -9,7 +9,7 @@
 
 #include <ltm/d_model_structs.h>
 #include <tf/LinearMath/Vector3.h>
-#include <geometry_msgs/Pose.h>
+#include <geometry_msgs/PoseArray.h>
 #include <string>
 
 class AbstractKinematicModel
@@ -18,6 +18,7 @@ class AbstractKinematicModel
     AbstractKinematicModel(std::string reference_frame, JointType joint);
     // Transform a point using the model. Point must be in reference_frame.
     virtual geometry_msgs::Pose Transform(geometry_msgs::Pose pose, tf::Vector3 force, double del_t) = 0;
+    virtual void Transform(geometry_msgs::PoseArray in_poses, geometry_msgs::Pose pose, tf::Vector3 force, double del_t, geometry_msgs::PoseArray* out_poses) = 0;
 
     // Accessors
     const std::string& reference_frame() const {return reference_frame_;}

@@ -17,6 +17,17 @@ geometry_msgs::Point Vector3ToPoint(tf::Vector3 v)
   return p;
 }
 
+bool PosesEqual(const geometry_msgs::Pose& p1, const geometry_msgs::Pose& p2)
+{
+  if (fabs(p1.position.x-p2.position.x) >= kFPTolerance ||
+      fabs(p1.position.y-p2.position.y) >= kFPTolerance ||
+      fabs(p1.position.z-p2.position.z) >= kFPTolerance)
+  {
+    return false;
+  }
+  return true;
+}
+
 /**----------------------------------------------------------------------------------------------**/
 
 /** Math**/

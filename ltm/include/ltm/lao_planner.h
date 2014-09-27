@@ -104,6 +104,8 @@ class LAOPlanner
     void DFSTraversal(std::vector<int>* traversal);
     /**@brief Reconstruct optimistic path (actions lead to successor with smallest V-value**/
     void ReconstructOptimisticPath(std::vector<int>* state_ids, std::vector<int>* fprim_ids);
+    /**@brief Do value iteration on the best solution graph**/
+    void SolutionValueIteration();
 
     /**@brief Planner hash table**/
     std::unordered_map<int, PlannerState> PlannerStateMap;

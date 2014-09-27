@@ -59,9 +59,15 @@ struct State_t
         s.changed_points.poses[offset].position.z);
        **/
 
+      /**
       if (fabs(changed_points.poses[ii].position.x-s.changed_points.poses[offset].position.x) >= kFPTolerance ||
           fabs(changed_points.poses[ii].position.y-s.changed_points.poses[offset].position.y) >= kFPTolerance ||
           fabs(changed_points.poses[ii].position.z-s.changed_points.poses[offset].position.z) >= kFPTolerance)
+      {
+        return false;
+      }
+      **/
+      if (!PosesEqual(changed_points.poses[ii], s.changed_points.poses[offset]))
       {
         return false;
       }
@@ -151,7 +157,8 @@ class DModelBank : public AbstractModelBank
 
     void AddEdge(int model_id, Edge e, EdgeParams e_params);
     void AddPoint(geometry_msgs::Pose p);
-    void AddGraspPoint(geometry_msgs::Pose p);
+    /**@brief Returns the index of the closest/attached point**/
+    int AddGraspPoint(geometry_msgs::Pose p);
 
     /**@brief Simulate a plan by applying a sequence of forces.
      * Uses the already set force index and simulation timestep
@@ -177,6 +184,17 @@ class DModelBank : public AbstractModelBank
     {
       return points_;
     }
+
+    /**@brief Return successor states**/
+    void GetSuccs(int source_state_id, std::vector<std::vector<int>>* succ_state_ids_map, 
+        std::vector<std::vector<double>>* succ_state_probabilities_map, 
+        std::vector<int>* action_ids, std::vector<double>* action_costs);
+    /**@brief Check belief state goal**/
+    bool IsGoalState(int state_id);
+    /**@brief Returns true if internal state satisfies partial goal**/
+    bool IsInternalGoalState(State_t state);
+    /**@brief Return heuristic for a state**/
+    double GetGoalHeuristic(int belief_state_id);
 
     /**@brief Return the forward simulated state of the d_model for the applied force.**/
     void GetNextState(int model_id, const geometry_msgs::PoseArray& in_points,
@@ -215,6 +233,9 @@ class DModelBank : public AbstractModelBank
     geometry_msgs::Pose TransformPose(const geometry_msgs::Pose& in_pose, std::string& from_frame, std::string& to_frame);
     tf::Vector3 TransformVector(const tf::Vector3& in_vec, std::string& from_frame, std::string& to_frame);
     tf::Point TransformPoint(const tf::Point& in_point, std::string& from_frame, std::string& to_frame);
+
+    /**@brief Compute the changed inds and points for poses in the world frame, with respect to the inital poses set for initialization**/
+    void GetChangedStateFromWorldPoses(const geometry_msgs::PoseArray& world_poses, std::vector<int>* changed_inds, geometry_msgs::PoseArray* changed_points);
 
     /**@brief Accessors**/
     int num_models() const {return num_models_;}
@@ -264,7 +285,8 @@ class DModelBank : public AbstractModelBank
         std::vector<int>* component_idxs,
         std::vector<int>* sep_idxs,
         JointType* joint_type,
-        tf::Vector3* normal);
+        tf::Vector3* normal,
+        tf::Vector3* center);
 
     /**@brief Return a set of successors for a given point*/
     void GetAdjPoints(int model_id, int p_idx, std::vector<int>* adj_points);
@@ -285,20 +307,12 @@ class DModelBank : public AbstractModelBank
     /**@brief Return true if valid state**/
     bool IsValidState(const State_t& s);
 
-    /**@brief Return successor states**/
-    void GetSuccs(int source_state_id, std::vector<std::vector<int>>* succ_state_ids_map, 
-        std::vector<std::vector<double>>* succ_state_probabilities_map, 
-        std::vector<int>* action_ids, std::vector<double>* action_costs);
     /**@brief Return successor states for individual model**/
     void GetSuccs(int model_id, int source_state_id, std::vector<int>* succs, 
         std::vector<int>* edge_ids, std::vector<double>* costs);
-    /**@brief Check belief state goal**/
-    bool IsGoalState(int state_id);
     /**@brief Returns true if state ID satisfies partial goal**/
     bool IsInternalGoalState(int state_id);
 
-    /**@brief Return heuristic for a state**/
-    double GetGoalHeuristic(int belief_state_id);
     double GetInternalGoalHeuristic(int internal_state_id);
 
     /**@brief Visualize internal state**/

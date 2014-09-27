@@ -23,9 +23,9 @@
     <param name="obs_file" value="$(find ltm_ros)/data/observations.txt"/> 
     <param name="bag_file" value="$(find ltm_ros)/data/observations.bag"/> 
     <param name="use_model_file" value="false"/>
-    <!--<param name="fprims_file" value="$(find ltm)/matlab/fprims/circle_40.fprim"/>-->
-    <param name="fprims_file" value="$(find ltm)/matlab/fprims/sphere_20.fprim"/>
-    <param name="sim_time_step" value="0.2"/> <!--1.0-->
+    <param name="fprims_file" value="$(find ltm)/matlab/fprims/circle_40.fprim"/>
+    <!--<param name="fprims_file" value="$(find ltm)/matlab/fprims/sphere_20.fprim"/>-->
+    <param name="sim_time_step" value="0.5"/> <!--0.2-->
     <param name="reference_frame" value="/base_link"/>
   </node>
 

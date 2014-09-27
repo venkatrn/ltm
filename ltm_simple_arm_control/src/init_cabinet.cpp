@@ -43,6 +43,8 @@ int main(int argc, char** argv){
     std::vector<double> l_init(7,0);
     std::vector<double> r_init(7,0);
 
+    // Chicken wings
+    /*
     l_init[0] = 0.43474247923335785;
     l_init[1] = 1.2952886686210827;
     l_init[2] = 0.30626353961552866;
@@ -58,6 +60,23 @@ int main(int argc, char** argv){
     r_init[4] =-2.8490612115504246;
     r_init[5] =-1.979940509361753;
     r_init[6] =-3.1167221313806674;
+    */
+
+    l_init[0] = 2.009;
+    l_init[1] = 1.266;
+    l_init[2] = 1.902;
+    l_init[3] = -2.045;
+    l_init[4] = 21.735;
+    l_init[5] = -2.002;
+    l_init[6] = -21.941;
+        
+    r_init[0] = 0.564;
+    r_init[1] = 1.296;
+    r_init[2] = -0.042;
+    r_init[3] = -1.521;
+    r_init[4] = -3.273;
+    r_init[5] = -1.644;
+    r_init[6] = -40.441;
 
     r_arm.sendArmToConfiguration(&r_init[0],3);
     l_arm.sendArmToConfiguration(&l_init[0],3);
@@ -70,6 +89,6 @@ int main(int argc, char** argv){
     while(!point_head_client_->waitForServer(ros::Duration(5.0))){
         ROS_INFO("Waiting for the point_head_action server to come up");
     }
-    //lookAt("base_link", 0.820, 0.095, 1.047, point_head_client_);
-    lookAt("base_link", 0.5, -0.1, 1.15, point_head_client_);
+    //lookAt("base_link", 0.5, -0.1, 1.15, point_head_client_);
+    lookAt("base_link", 0.5, -0.05, 1.2, point_head_client_);
 }

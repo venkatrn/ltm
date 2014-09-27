@@ -16,6 +16,7 @@ class SphericalModel : public AbstractKinematicModel
     SphericalModel(std::string reference_frame);
     SphericalModel(std::string reference_frame, tf::Vector3 center_point);
     virtual geometry_msgs::Pose Transform(geometry_msgs::Pose pose, tf::Vector3 force, double del_t);
+    virtual void Transform(geometry_msgs::PoseArray in_poses, geometry_msgs::Pose pose, tf::Vector3 force, double del_t, geometry_msgs::PoseArray* out_poses);
     /**@brief The axis of rotation, and a point on the axis**/
     void SetParams(tf::Vector3 center_point);
   protected:

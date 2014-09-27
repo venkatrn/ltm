@@ -21,7 +21,7 @@
 // Multiplier for edge costs to avoid working with floating point numbers.
 const double kCostMultiplier = 1e3;
 // Error tolerance for comparing goal point locations.
-const double kGoalTolerance = 0.1; //0.05, 0.01 for experiments //0.25
+const double kGoalTolerance = 0.25; //0.05, 0.01 for experiments //0.25
 
 using namespace std;
 
@@ -37,7 +37,7 @@ DModelBank::DModelBank(const string& reference_frame)
   env_cfg_.start_state_id = -1;
   env_cfg_.internal_start_state_id = -1;
   env_cfg_.sim_time_step = 0.1;
-  visualize_dmodel_ = true;
+  visualize_dmodel_ = false;
   visualize_expansions_ = true;
 }
 
@@ -68,6 +68,7 @@ void DModelBank::InitEdgeMap(int num_models)
     EdgeMap* edge_map = new unordered_map<Edge, EdgeParams, pair_hash>();
     edge_maps_.push_back(edge_map);
   }
+  viz_->VisualizeModel(*(edge_maps_[0]), points_);
 }
 
 void DModelBank::InitFromObs(vector<Edge> edges, vector<vector<EdgeParams>> edge_params)
@@ -201,7 +202,7 @@ void DModelBank::SetPoints(const geometry_msgs::PoseArray& points)
 {
   points_.poses.clear();
   points_ = points;
-  ROS_DEBUG("DModelBank: %d points have been set.\n", int(points_.poses.size())); 
+  ROS_INFO("DModelBank: %d points have been set.\n", int(points_.poses.size())); 
   TFCallback(points_);
   return;
 }
@@ -270,20 +271,29 @@ void DModelBank::AddEdge(int model_id, Edge e, EdgeParams e_params)
     //printf("Size of edge map: %d\n",edge_map->size());
     (*edge_map)[e] = e_params;
     // By default, assume that the reverse connection is of the same type, unless otherwise provided
+    EdgeParams reverse_e_params;
+    if (e_params.joint != RIGID)
+    {
+    reverse_e_params.joint = e_params.joint;
+    //string first_local = to_string(e.first);
+    //string second_local = to_string(e.second);
+    string first_local = reference_frame_;
+    string second_local = reference_frame_;
+    reverse_e_params.normal = TransformVector(e_params.normal, first_local, second_local);
+    reverse_e_params.center = TransformPoint(tf::Point(e_params.center.x(), e_params.center.y(), e_params.center.z()), 
+                              first_local, second_local);
+    (*edge_map)[make_pair(e.second, e.first)] = reverse_e_params;
+    }
+    else
+    {
     (*edge_map)[make_pair(e.second, e.first)] = e_params;
+    }
   }
   else
   {
     // Overwrite the joint type
     (*edge_map)[e] = e_params;
   }
-  /*
-     else if (e_params.joint != RIGID)
-     {
-     (*edge_map)[e] = e_params;
-     (*edge_map)[make_pair(e.second, e.first)] = e_params;
-     }
-     */
 
   return;
 }
@@ -294,7 +304,7 @@ void DModelBank::AddPoint(geometry_msgs::Pose p)
   return;
 }
 
-void DModelBank::AddGraspPoint(geometry_msgs::Pose p)
+int DModelBank::AddGraspPoint(geometry_msgs::Pose p)
 {
   ROS_INFO("Adding grasp point");
   // This is a special case where a point can be added after the model is learnt.
@@ -314,6 +324,8 @@ void DModelBank::AddGraspPoint(geometry_msgs::Pose p)
   Edge e = make_pair(num_points, closest_p_idx);
   EdgeParams e_params(RIGID, tf::Vector3(0.0, 0.0, 0.0), 1.0);
   AddPoint(p);
+  // Must set transform before adding edge
+  TFCallback(points_);
   // Add edge in all models
   for (int ii = 0; ii < num_models_; ++ii)
   {
@@ -321,8 +333,8 @@ void DModelBank::AddGraspPoint(geometry_msgs::Pose p)
     AddEdge(ii, e, e_params);
   }
   AddGraspIdx(num_points);
-  TFCallback(points_);
-  return;
+  viz_->VisualizeModel(*(edge_maps_[0]), points_);
+  return closest_p_idx;
 }
 
 void DModelBank::TFTimedCallback(const ros::TimerEvent& event)
@@ -384,7 +396,7 @@ void DModelBank::TFCallback(geometry_msgs::PoseArray dmodel_points)
 }
 
 void DModelBank::ExtractIndices(int model_id, int p_idx, vector<int>* component_idxs, vector<int>* sep_idxs, JointType* joint_type,
-    tf::Vector3* normal)
+    tf::Vector3* normal, tf::Vector3* center)
 {
   assert(model_id < int(edge_maps_.size()));
   EdgeMap* edge_map = edge_maps_[model_id];
@@ -422,12 +434,14 @@ void DModelBank::ExtractIndices(int model_id, int p_idx, vector<int>* component_
         ROS_ERROR("DModelBank: Adj list says neighbor exists, but edge map has no information\n");
       }
       // Add successor to separator list if not a rigid connection
+      // TODO: Don't add the same separator twice
       if (e_params.joint != RIGID) 
       {
         sep_idxs->push_back(adj_points[ii]);
         // TODO: Check for conflicting joint types
         *joint_type = e_params.joint;
         *normal = e_params.normal;
+        *center = e_params.center;
         continue;
       }
       // Add to open list and update the frontier list
@@ -468,8 +482,8 @@ void DModelBank::GetNextState(int model_id, const geometry_msgs::PoseArray& in_p
   *out_points = in_points;
   vector<int> component_idxs, sep_idxs;
   JointType joint_type;
-  tf::Vector3 normal;
-  ExtractIndices(model_id, p_idx, &component_idxs, &sep_idxs, &joint_type, &normal);
+  tf::Vector3 normal, center;
+  ExtractIndices(model_id, p_idx, &component_idxs, &sep_idxs, &joint_type, &normal, &center);
 
 
   // DEBUG
@@ -489,7 +503,7 @@ void DModelBank::GetNextState(int model_id, const geometry_msgs::PoseArray& in_p
      printf("%d ", sep_idxs[ii]);
      }
      printf("\n");
-     */
+  */
 
   int closest_p_idx = -1;
   if (sep_idxs.size() != 0) 
@@ -525,12 +539,13 @@ void DModelBank::GetNextState(int model_id, const geometry_msgs::PoseArray& in_p
   }
   else
   {
-    string target_frame = to_string(closest_p_idx);
+    //string target_frame = to_string(closest_p_idx);
+    string target_frame = reference_frame_;
     tf::Vector3 transformed_force = TransformVector(force, reference_frame_, target_frame);
     // TODO: The following three lines will go as soon as the EdgeParam is updated to hold the center and axis in local frames
-    tf::Vector3 center(out_points->poses[closest_p_idx].position.x, out_points->poses[closest_p_idx].position.y, out_points->poses[closest_p_idx].position.z);
-    center = TransformPoint(tf::Point(center.x(), center.y(), center.z()), reference_frame_, target_frame);
-    normal = TransformVector(normal, reference_frame_, target_frame);
+    //center = tf::Vector3(out_points->poses[closest_p_idx].position.x, out_points->poses[closest_p_idx].position.y, out_points->poses[closest_p_idx].position.z);
+    //center = TransformPoint(tf::Point(center.x(), center.y(), center.z()), reference_frame_, target_frame);
+    //normal = TransformVector(normal, reference_frame_, target_frame);
 
     // Set up the kinematics model
     AbstractKinematicModel* kinematic_model;
@@ -556,14 +571,22 @@ void DModelBank::GetNextState(int model_id, const geometry_msgs::PoseArray& in_p
     }
     assert(kinematic_model != nullptr);
 
+    geometry_msgs::PoseArray transformed_poses;
+    geometry_msgs::PoseArray in_poses, out_poses;
     for (size_t ii = 0; ii < component_idxs.size(); ++ii)
     {
-      geometry_msgs::Pose pose = out_points->poses[component_idxs[ii]];
-      // Transform pose to target frame before applying the kinematics forward model
-      geometry_msgs::Pose transformed_pose = TransformPose(pose, reference_frame_, target_frame);
-      geometry_msgs::Pose new_pose = kinematic_model->Transform(transformed_pose, transformed_force, del_t);
+      // Transform poses to target frame before applying the kinematics forward model
+      geometry_msgs::Pose in_pose = out_points->poses[component_idxs[ii]];
+      geometry_msgs::Pose transformed_pose = TransformPose(in_pose, reference_frame_, target_frame);
+      in_poses.poses.push_back(transformed_pose);
+    }
+    geometry_msgs::Pose application_pose = out_points->poses[p_idx];
+    kinematic_model->Transform(in_poses, application_pose, transformed_force, del_t, &out_poses);
+
+    for (size_t ii = 0; ii < component_idxs.size(); ++ii)
+    {
       // Transform back to reference frame
-      out_points->poses[component_idxs[ii]] = TransformPose(new_pose, target_frame, reference_frame_);
+      out_points->poses[component_idxs[ii]] = TransformPose(out_poses.poses[ii], target_frame, reference_frame_);
     }
     delete kinematic_model;
   }
@@ -632,22 +655,16 @@ void DModelBank::VisualizeInternalState(int model_id, int internal_state_id)
     }
   }
   //TODO: harcoded colors for now
-  ltm::RGBA edge_color, point_color;
-  ltm::RGBA model1_edge(1.0, 0.0, 0.0, 1.0);
-  ltm::RGBA model1_point(0.0, 0.0, 1.0, 1.0);
-  ltm::RGBA model2_edge(0.0, 0.0, 1.0, 1.0);
-  ltm::RGBA model2_point(1.0, 0.0, 0.0, 1.0);
-  switch(model_id)
-  {
-    case 0:
-      edge_color = model1_edge;
-      point_color = model1_point;
-      break;
-    default:
-      edge_color = model2_edge;
-      point_color = model2_point;
-  }
-  viz_->VisualizeModel(*(edge_maps_[model_id]), points, edge_color, point_color);
+  vector<ltm::RGBA> model_colors;
+  model_colors.push_back(ltm::RGBA(241.0/255,21.0/255,56.0/255,1.0));
+  model_colors.push_back(ltm::RGBA(73.0/255,219.0/255,19.0/255,1.0));
+  model_colors.push_back(ltm::RGBA(111.0/255,25.0/255,173.0/255,1.0));
+  model_colors.push_back(ltm::RGBA(255.0/255,162.0/255,23.0/255,1.0));
+  model_colors.push_back(ltm::RGBA(235.0/255,82.0/255,0.0/255,1.0));
+  model_colors.push_back(ltm::RGBA(0.0/255,155.0/255,108.0/255,1.0));
+  model_colors.push_back(ltm::RGBA(252.0/255,0.0/255,85.0/255,1.0));
+  ltm::RGBA color = model_colors[model_id % model_colors.size()];
+  viz_->VisualizeModel(*(edge_maps_[model_id]), points, color, color);
   return;
 }
 
@@ -781,6 +798,27 @@ void DModelBank::GetSuccs(int source_state_id,
     (*succ_state_ids_map)[action_num] = it->second;
     (*succ_state_probabilities_map)[action_num] = probabilities_map[action_id];
     action_num++;
+  }
+}
+
+void DModelBank::GetChangedStateFromWorldPoses(const geometry_msgs::PoseArray& world_poses, vector<int>* changed_inds, geometry_msgs::PoseArray* changed_points)
+{
+  // world_poses should not include the grasp poses
+  changed_inds->clear();
+  changed_points->poses.clear();
+  if (world_poses.poses.size() != points_.poses.size())
+  {
+    ROS_ERROR("Number of world poses (%d) does not match internal number of poses used for initialization (%d)", world_poses.poses.size(), points_.poses.size());
+    State_t empty_state;
+    return;
+  }
+  for (size_t ii = 0; ii < points_.poses.size(); ++ii)
+  {
+    if (!PosesEqual(points_.poses[ii], world_poses.poses[ii]))
+    {
+      changed_inds->push_back(ii);
+      changed_points->poses.push_back(world_poses.poses[ii]);
+    }
   }
 }
 
@@ -932,11 +970,22 @@ bool DModelBank::IsInternalGoalState(int state_id)
   return true;
 }
 
+bool DModelBank::IsInternalGoalState(State_t state)
+{
+  int state_id = StateToStateID(state);
+  return IsInternalGoalState(state_id);
+}
+
 double DModelBank::GetGoalHeuristic(int belief_state_id)
 {
+  if (IsGoalState(belief_state_id))
+  {
+    return 0.0;
+  }
   BeliefState_t s = BeliefStateIDToState(belief_state_id);
   int internal_state_id = s.internal_state_id;
-  return 10*GetInternalGoalHeuristic(internal_state_id);
+  const double kHeurMultiplier = 50.0; //10
+  return kHeurMultiplier*GetInternalGoalHeuristic(internal_state_id);
 }
 
 double DModelBank::GetInternalGoalHeuristic(int internal_state_id)

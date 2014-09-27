@@ -18,7 +18,9 @@
 using namespace std;
 
 LAORobotLTM::LAORobotLTM() : num_goals_received_(0),
-                             ar_marker_tracking_(false)
+                             record_observations_(false),
+                             record_bag_(false),
+                             full_trajectory_execution_(true)
 {
   ros::NodeHandle private_nh("~");
   private_nh.param("use_model_file", use_model_file_, false);
@@ -90,36 +92,44 @@ void LAORobotLTM::LearnCB(const std_msgs::Int32ConstPtr& learning_mode)
   // Learning modes: 0-Learning not yet started, 1-Learning in progress, 2-Learning is complete
   if (learning_mode->data == 0)
   {
-    ar_marker_tracking_ = false;
+    //ar_marker_tracking_ = false;
     return;
   }
 
   if (learning_mode->data == 1)
   {
     // Trigger AR Marker tracking
-    ar_marker_tracking_ = true;
+    //ar_marker_tracking_ = true;
     // Reset observations and edges
     observations_.clear();
     // Open the rosbag file for recording data
-    ROS_INFO("[LTM Node]: Writing point cloud data to %s", bag_file_.c_str());
-    bag_.open(bag_file_, rosbag::bagmode::Write);
-
+    if (record_bag_)
+    {
+      ROS_INFO("[LTM Node]: Writing point cloud data to %s", bag_file_.c_str());
+      bag_.open(bag_file_, rosbag::bagmode::Write);
+    }
     return;
   }
 
   if (learning_mode->data == 2)
   {
     // Stop AR Marker tracking, and pass observations to d_model
-    ar_marker_tracking_ = false;
-    bag_.close();
+    //ar_marker_tracking_ = false;
+    if (record_bag_)
+    {
+       bag_.close();
+    }
     ROS_INFO("[LTM Node]: Finished recording %d frames", observations_.size());
     
     if (int(observations_.size()) == 0)
     {
-      ROS_INFO("[LTM Node]: Learning stopped before any observations have been received. No model will be learnt");
+      ROS_INFO("[LTM Node]: No observations have been received--cannot learn parameters and initialize the model");
       return;
     }
-    SaveObservationsToFile(obs_file_.c_str());
+    if (record_observations_)
+    {
+      SaveObservationsToFile(obs_file_.c_str());
+    }
 
     // For now, learn the prior and visualize immediately after recording
     // learner_->AddGraspIdx(0); //Deprecated--cannot add grasp idx before initializing models
@@ -130,6 +140,7 @@ void LAORobotLTM::LearnCB(const std_msgs::Int32ConstPtr& learning_mode)
     learner_->LearnPrior(observations_);
     */
     vector<Edge> edges;
+    d_model_bank_->SetPoints(last_observed_pose_);
     learner_->SetModelBank(d_model_bank_);
     learner_->ComputeEdges(observations_[0], &edges);
     ROS_INFO("LTM Node: Number of edges in model: %d", int(edges.size()));
@@ -154,11 +165,7 @@ void LAORobotLTM::LearnCB(const std_msgs::Int32ConstPtr& learning_mode)
     num_models_ = edge_params.size();
     d_model_bank_->InitFromObs(edges, edge_params); 
     ROS_INFO("LTM Node: Initialized model from live observation\n");
-
     return;
-
-    // TODO: Not using the old learning method currently
-    // d_model_->LearnDModelParameters(observations_, edges_);
   }
 }
 
@@ -172,8 +179,13 @@ void LAORobotLTM::GraspCB(const geometry_msgs::PoseStampedConstPtr& grasp_pose)
   tf_listener_.transformPose(reference_frame_, *grasp_pose, grasp_pose_ref_frame);
   // Set the grasp pose, to transform the end effector trajectory later
   grasp_pose_ = grasp_pose_ref_frame.pose;
-  d_model_bank_->AddGraspPoint(grasp_pose_);
-  ROS_INFO("[LTM Node]: Added new grasp point"); 
+  // Store the local grasp pose
+  const int closest_p_idx = d_model_bank_->AddGraspPoint(grasp_pose_);
+  ROS_INFO("[LTM Node]: Added new grasp point, attached to %d", closest_p_idx); 
+  string local_frame = boost::lexical_cast<string>(closest_p_idx);
+  geometry_msgs::Pose local_grasp = d_model_bank_->TransformPose(grasp_pose_, reference_frame_, local_frame);
+  grasp_attached_idxs_.push_back(closest_p_idx);
+  local_grasp_poses_.push_back(local_grasp);
   // TODO: Make this general
   geometry_msgs::PoseArray points = d_model_bank_->GetDModelPoints();
   grasp_idxs_.push_back(points.poses.size() - 1);
@@ -192,7 +204,8 @@ void LAORobotLTM::GoalCB(const geometry_msgs::PoseStampedConstPtr& goal_pose)
   // Set goal
   if (grasp_idxs_.size() == 0 || num_goals_received_ >= grasp_idxs_.size())
   {
-    ROS_INFO("LTM Node: Grasp points have not been set, or invalid goal num\n");
+    ROS_INFO("LTM Node: Grasp points have not been set, or invalid goal num. Ignoring goal.\n");
+    return;
   }
 
   goal_state_.changed_inds.push_back(grasp_idxs_[num_goals_received_]);
@@ -250,6 +263,24 @@ void LAORobotLTM::UpdateStartState()
     return;
   }
   start_state_.grasp_idx = grasp_idxs_[0];
+  assert(observations_.size() != 0);
+  // Must append the grasp poses to AR marker poses--need the TF's for the changed points first
+  //TODO: smarter way to do this
+  tf::Transform transform;
+  for (size_t ii = 0; ii < last_observed_pose_.poses.size(); ++ii)
+  {
+    static tf::TransformBroadcaster tf_br_;
+    geometry_msgs::Pose p = last_observed_pose_.poses[ii];
+    transform.setOrigin(tf::Vector3(p.position.x, p.position.y, p.position.z) );
+    transform.setRotation(tf::Quaternion(p.orientation.x, p.orientation.y, p.orientation.z, p.orientation.w));
+    string child_frame_id = boost::lexical_cast<string>(ii); //assuming the idxs are same until the grasp idxx
+    tf_br_.sendTransform(tf::StampedTransform(transform, ros::Time::now(), reference_frame_.c_str(), child_frame_id.c_str()));
+  }
+
+  geometry_msgs::PoseArray appended_poses;
+  ObservationsToModelPoses(last_observed_pose_, &appended_poses);
+  d_model_bank_->GetChangedStateFromWorldPoses(appended_poses, &start_state_.changed_inds, &start_state_.changed_points);
+    ROS_INFO("[LAO Robot LTM]: %d points have changed in the start state", start_state_.changed_inds.size());
   d_model_bank_->SetInternalStartState(start_state_);
 
   BeliefState_t start_belief_state;
@@ -267,8 +298,36 @@ void LAORobotLTM::GetStartBelief(vector<double>* belief)
   return;
 }
 
-void LAORobotLTM::GetExecutionTraj(const vector<int>& state_ids, const vector<int>& fprim_ids, geometry_msgs::PoseArray* traj)
+void LAORobotLTM::GetExecutionTraj(const vector<int>& all_state_ids, const vector<int>& all_fprim_ids, geometry_msgs::PoseArray* traj)
 {
+  // Truncate trajectory
+  const int num_points = 4;
+  if (num_points == int(all_state_ids.size()))
+  {
+    full_trajectory_execution_ = true;
+  }
+  else
+  {
+    full_trajectory_execution_ = false;
+  }
+  vector<int> state_ids, fprim_ids;
+  assert(all_state_ids.size() == all_fprim_ids.size()); // TODO: this must change
+  if (all_state_ids.size() < 2)
+  {
+    ROS_ERROR("[LAO Robot LTM]: Trajectory has less than 2 waypoints");
+    traj->poses.clear();
+    return;
+  }
+  else if (num_points > all_state_ids.size())
+  {
+    state_ids = all_state_ids;
+    fprim_ids = all_fprim_ids;
+  }
+  else
+  {
+    state_ids.assign(all_state_ids.begin(), all_state_ids.begin() + num_points);
+    fprim_ids.assign(all_fprim_ids.begin(), all_fprim_ids.begin() + num_points);
+  }
   // Get forces from fprim_ids
   vector<tf::Vector3> forces;
   vector<int> grasp_points;
@@ -311,8 +370,12 @@ void LAORobotLTM::GetExecutionTraj(const vector<int>& state_ids, const vector<in
 void LAORobotLTM::TrajExecCB(const std_msgs::Int32ConstPtr& exec_mode_ptr)
 {
   int exec_mode = static_cast<int>(exec_mode_ptr->data);
-  // TODO: Check if actual goal has been reached
-  if (exec_mode == 1)
+  State_t temp_goal_state;
+  temp_goal_state.grasp_idx = grasp_idxs_[0]; //TODO: this will fail for multi-grasp points
+  geometry_msgs::PoseArray appended_poses;
+  ObservationsToModelPoses(last_observed_pose_, &appended_poses);
+  d_model_bank_->GetChangedStateFromWorldPoses(appended_poses, &temp_goal_state.changed_inds, &temp_goal_state.changed_points);
+  if (!full_trajectory_execution_ && d_model_bank_->IsInternalGoalState(temp_goal_state)) 
   {
     // Success--reset goal state to be ready for next goal request
     ROS_INFO("[LTM Node]: Task completed successfully, ready for new goal request");
@@ -326,9 +389,8 @@ void LAORobotLTM::TrajExecCB(const std_msgs::Int32ConstPtr& exec_mode_ptr)
     ROS_INFO("[LTM Node]: Partial trajectory executed, replanning to goal");
     UpdateStartState();
 
-    //TODO: Not setting belief goal state for now, since it depends on internal goal state
-    //Note: Make sure to recompute goal state changed points when the start state changes
-    d_model_bank_->SetInternalGoalState(goal_state_);
+    //Assuming that the goal does not change midway through execution
+    //d_model_bank_->SetInternalGoalState(goal_state_);
     PlanAndExecute();
   }
   return;
@@ -348,7 +410,7 @@ void LAORobotLTM::PerceptionCB(const ltm_msgs::PolygonArrayStamped& rectangles)
 void LAORobotLTM::KinectCB(const sensor_msgs::PointCloud2& point_cloud)
 {
   // Do not write to bag file if not in tracking mode
-  if (!ar_marker_tracking_)
+  if (!record_bag_)
   {
     return;
   }
@@ -361,10 +423,12 @@ void LAORobotLTM::KinectCB(const sensor_msgs::PointCloud2& point_cloud)
 void LAORobotLTM::ARMarkersCB(const ar_track_alvar_msgs::AlvarMarkersConstPtr& ar_markers)
 {
   // Do not store poses if not in learning mode
+  /*
   if (!ar_marker_tracking_)
   {
     return;
   }
+  */
   
   // Ensure we have same number of markers in each frame
   const int num_markers = int(ar_markers->markers.size());
@@ -376,13 +440,11 @@ void LAORobotLTM::ARMarkersCB(const ar_track_alvar_msgs::AlvarMarkersConstPtr& a
   }
 
   // This is a hack (assuming fixed number of markers)
-  /*
   const int num_tracked_markers = 3;
   if (num_markers != num_tracked_markers)
   {
     return;
   }
-  */
 
   // We will assume that the first frame contains all the markers we want to track
   if (int(observations_.size()) != 0)
@@ -450,9 +512,17 @@ void LAORobotLTM::ARMarkersCB(const ar_track_alvar_msgs::AlvarMarkersConstPtr& a
     pose_array = temp_pose_array;
   }
 
-  d_model_bank_->SetPoints(pose_array);
-
-  observations_.push_back(pose_array);
+  // Initialize the d_model only once
+  if (observations_.size() == 0)
+  {
+    observations_.push_back(pose_array);
+  }
+  // Record the observations if needed
+  if (record_observations_)
+  {
+    observations_.push_back(pose_array);
+  }
+  last_observed_pose_ = pose_array;
 
   // Grab the kinect data and other stuff needed
   //sleep(1);
@@ -656,3 +726,12 @@ bool LAORobotLTM::GetRightIK(const vector<double>& ik_pose, const vector<double>
   return false;
 }
 
+void LAORobotLTM::ObservationsToModelPoses(const geometry_msgs::PoseArray& observations, geometry_msgs::PoseArray* appended_poses)
+{
+  appended_poses->poses = observations.poses;
+  for (int ii = 0; ii < local_grasp_poses_.size(); ++ii)
+  { 
+    string local_frame = boost::lexical_cast<string>(grasp_attached_idxs_[ii]); //assuming the idxs are same until the grasp idxx
+    appended_poses->poses.push_back(d_model_bank_->TransformPose(local_grasp_poses_[ii], local_frame, reference_frame_));
+  }
+}

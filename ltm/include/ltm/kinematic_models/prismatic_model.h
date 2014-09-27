@@ -16,6 +16,7 @@ class PrismaticModel : public AbstractKinematicModel
     PrismaticModel(std::string reference_frame);
     PrismaticModel(std::string reference_frame, tf::Vector3 axis);
     virtual geometry_msgs::Pose Transform(geometry_msgs::Pose pose, tf::Vector3 force, double del_t);
+    virtual void Transform(geometry_msgs::PoseArray in_poses, geometry_msgs::Pose pose, tf::Vector3 force, double del_t, geometry_msgs::PoseArray* out_poses);
     /**@brief The axis of rotation, and a point on the axis**/
     void SetParams(tf::Vector3 axis);
 

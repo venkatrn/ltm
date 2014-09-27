@@ -22,6 +22,7 @@ double SqrDist(geometry_msgs::Point p1, geometry_msgs::Point p2);
 double Norm(geometry_msgs::Point p);
 double Norm(tf::Vector3 v);
 tf::Vector3 Cross(tf::Vector3 a, tf::Vector3 b);
+bool PosesEqual(const geometry_msgs::Pose& p1, const geometry_msgs::Pose& p2);
 
 double Sqr(double num);
 double Max(double a, double b, double c);

@@ -445,13 +445,14 @@ double DModelLearner::GetMinCut(const vector<vector<double>>& edge_weights, vect
     }
   }
   min_cut_edges->clear();
+  //ROS_INFO("Number of vertices in best cut: %d", best_cut.size());
   for (size_t ii = 0; ii < best_cut.size(); ++ii)
   {
     for (size_t jj = 0; jj < N; ++jj)
     {
       const int vertex = best_cut[ii];
       if (int(jj) == vertex) continue;
-      if (weights[vertex][jj] == numeric_limits<double>::max()) continue;
+      if (edge_weights[vertex][jj] == numeric_limits<double>::max()) {ROS_INFO("Infinite edge weight from %d to %d", vertex, jj); continue;}
       if (find(best_cut.begin(), best_cut.end(), jj) != best_cut.end()) continue;
       min_cut_edges->push_back(make_pair(vertex, jj));
     }
@@ -487,9 +488,13 @@ void DModelLearner::PlanesToKinematicModels(const ltm_msgs::PolygonArrayStamped 
     // 4 revolute models (one for each side of the rectangle) + 1 prismatic model (normal to the rectangle)
     for (int jj = 0; jj < 4; ++jj)
     {
+      //TODO: Debugging
+      //if (fabs(axes[jj%2].normalized().z() < 0.9)) continue;
+      //axes[jj%2] = tf::Vector3(0.0, 0.0, 1.0);
       RevoluteModel* revolute_model = new RevoluteModel(reference_frame_, axes[jj%2], points[jj]);
       learnt_models_.push_back(revolute_model);
       kinematic_models->push_back(revolute_model);
+      viz_->VisualizeAxis(axes[jj%2], points[jj]);
     }
     tf::Vector3 normal = axes[1].cross(axes[0]);
     normal.normalize();
@@ -499,6 +504,7 @@ void DModelLearner::PlanesToKinematicModels(const ltm_msgs::PolygonArrayStamped 
   }
 }
 
+/*
 void DModelLearner::GenerateModels(const geometry_msgs::PoseArray& points, const std::vector<Edge>& edges, const std::vector<AbstractKinematicModel*>& kinematic_models, std::vector<std::vector<EdgeParams>>* edge_params)
 {
   edge_params->clear();
@@ -551,7 +557,12 @@ void DModelLearner::GenerateModels(const geometry_msgs::PoseArray& points, const
           ROS_INFO("Model %d", ii);
           for (int jj = 0; jj < num_edges; ++jj)
           {
-            ROS_INFO("    %d--->%d : %d",edges[jj].first, edges[jj].second, (*edge_params)[ii][jj].joint);
+            EdgeParams e_params = (*edge_params)[ii][jj];
+            ROS_INFO("    %d--->%d : %d",edges[jj].first, edges[jj].second, e_params.joint);
+            if (e_params.joint == PRISMATIC)
+            {
+              ROS_INFO("      Axis: %f %f %f", e_params.normal.x(), e_params.normal.y(), e_params.normal.z());
+            }
           }
           break;
         }
@@ -590,7 +601,13 @@ void DModelLearner::GenerateModels(const geometry_msgs::PoseArray& points, const
           ROS_INFO("Model %d", ii);
           for (int jj = 0; jj < num_edges; ++jj)
           {
-            ROS_INFO("    %d--->%d : %d",edges[jj].first, edges[jj].second, (*edge_params)[ii][jj].joint);
+            EdgeParams e_params = (*edge_params)[ii][jj];
+            ROS_INFO("    %d--->%d : %d",edges[jj].first, edges[jj].second, e_params.joint);
+            if (e_params.joint == REVOLUTE)
+            {
+              ROS_INFO("      Axis: %f %f %f", e_params.normal.x(), e_params.normal.y(), e_params.normal.z());
+              ROS_INFO("      Center: %f %f %f", e_params.center.x(), e_params.center.y(), e_params.center.z());
+            }
           }
           break;
         }
@@ -605,7 +622,7 @@ void DModelLearner::GenerateModels(const geometry_msgs::PoseArray& points, const
     }
   }
 }
-
+*/
 void DModelLearner::GenerateModelsMinCut(const geometry_msgs::PoseArray& points, const std::vector<Edge>& edges, const std::vector<AbstractKinematicModel*>& kinematic_models, std::vector<std::vector<EdgeParams>>* edge_params)
 {
   edge_params->clear();
@@ -621,6 +638,7 @@ void DModelLearner::GenerateModelsMinCut(const geometry_msgs::PoseArray& points,
     ROS_WARN("[DModel Learner]: No kinematic models available to compute edge parameteres");
     return;
   }
+  const int num_points = points.poses.size();
   edge_params->resize(num_models);
   // Make sure tf is available, so that we can set the model params in the local frames
   candidate_model_bank_->TFCallback(points);
@@ -638,10 +656,10 @@ void DModelLearner::GenerateModelsMinCut(const geometry_msgs::PoseArray& points,
           const PrismaticModel* prismatic_model = dynamic_cast<const PrismaticModel*>(kinematic_model);
           tf::Vector3 axis = prismatic_model->axis();
           // Compute edge weights for mincut
-          vector<vector<double>> weights(num_edges);
-          for (int jj = 0; jj < num_edges; ++jj)
+          vector<vector<double>> weights(num_points);
+          for (int jj = 0; jj < num_points; ++jj)
           {
-            weights[jj].resize(num_edges, numeric_limits<double>::max());
+            weights[jj].resize(num_points, numeric_limits<double>::max());
           }
           double d_weight, p_weight, total_weight;
           for (int jj = 0; jj < num_edges; ++jj)
@@ -653,32 +671,42 @@ void DModelLearner::GenerateModelsMinCut(const geometry_msgs::PoseArray& points,
             tf::Vector3 normalized_edge = edge.normalized();
             d_weight = edge.length2();
             p_weight = fabs(normalized_edge.dot(axis));
+            p_weight = 0;
             total_weight = exp(-(kAlphaDist * d_weight + kAlphaAngle * p_weight));
             weights[edges[jj].first][edges[jj].second] = total_weight;
             weights[edges[jj].second][edges[jj].first] = total_weight;
           }
           vector<Edge> min_cut_edges;
           const double min_cut = GetMinCut(weights, &min_cut_edges);
-          ROS_INFO("Mincut (Prismatic): %f", min_cut);
+          // ROS_INFO("Mincut (Prismatic): %f, Num Mincut Edges: %d", min_cut, min_cut_edges.size());
           for (int jj = 0; jj < num_edges; ++jj)
           {
             EdgeParams e_params;
-            if (find(min_cut_edges.begin(), min_cut_edges.end(), edges[jj]) == min_cut_edges.end())
+            bool no_edge_first = find(min_cut_edges.begin(), min_cut_edges.end(), edges[jj]) == min_cut_edges.end();
+            bool no_edge_second = find(min_cut_edges.begin(), min_cut_edges.end(), make_pair(edges[jj].second, edges[jj].first)) == min_cut_edges.end();
+            if (no_edge_first && no_edge_second)
             {
               e_params.joint = RIGID;
             }
             else
             {
-              string local_frame = to_string(edges[jj].first);
+              //string local_frame = to_string(edges[jj].first);
+              string local_frame = reference_frame_;
               e_params.joint = PRISMATIC;
               e_params.normal = candidate_model_bank_->TransformVector(axis, reference_frame_, local_frame);
+              //e_params.normal = axis;
             }
             (*edge_params)[ii].push_back(e_params);
           }
-          ROS_INFO("Prismatic Model %d", ii);
+          ROS_INFO("%d Prismatic Model", ii);
           for (int jj = 0; jj < num_edges; ++jj)
           {
-            ROS_INFO("    %d--->%d : %d",edges[jj].first, edges[jj].second, (*edge_params)[ii][jj].joint);
+            EdgeParams e_params = (*edge_params)[ii][jj];
+            ROS_INFO("    %d--->%d : %d",edges[jj].first, edges[jj].second, e_params.joint);
+            if (e_params.joint == PRISMATIC)
+            {
+              ROS_INFO("      Axis: %f %f %f", e_params.normal.x(), e_params.normal.y(), e_params.normal.z());
+            }
           }
           break;
         }
@@ -688,10 +716,10 @@ void DModelLearner::GenerateModelsMinCut(const geometry_msgs::PoseArray& points,
           tf::Vector3 axis = revolute_model->axis();
           tf::Vector3 axis_point = revolute_model->axis_point();
           // Compute edge weights for mincut
-          vector<vector<double>> weights(num_edges);
-          for (int jj = 0; jj < num_edges; ++jj)
+          vector<vector<double>> weights(num_points);
+          for (int jj = 0; jj < num_points; ++jj)
           {
-            weights[jj].resize(num_edges, numeric_limits<double>::max());
+            weights[jj].resize(num_points, numeric_limits<double>::max());
           }
           double d_weight, r_weight, total_weight;
           for (int jj = 0; jj < num_edges; ++jj)
@@ -708,35 +736,53 @@ void DModelLearner::GenerateModelsMinCut(const geometry_msgs::PoseArray& points,
             p1_arm.normalize(); p2_arm.normalize();
             d_weight = edge.length2();
             r_weight = p1_arm.cross(p2_arm).length();
+            r_weight = 0;
             total_weight = exp(-(kAlphaDist * d_weight + kAlphaAngle * r_weight));
             weights[edges[jj].first][edges[jj].second] = total_weight;
             weights[edges[jj].second][edges[jj].first] = total_weight;
           }
           vector<Edge> min_cut_edges;
           const double min_cut = GetMinCut(weights, &min_cut_edges);
-          ROS_INFO("Mincut (Revolute): %f", min_cut);
+          /*
+          ROS_INFO("Mincut (Revolute): %f, Num Mincut Edges: %d", min_cut, min_cut_edges.size());
+          for (int jj = 0; jj < min_cut_edges.size(); ++jj)
+          {
+            ROS_INFO("Edge: %d %d", min_cut_edges[jj].first, min_cut_edges[jj].second);
+          }
+          */
           for (int jj = 0; jj < num_edges; ++jj)
           {
             EdgeParams e_params;
-            if (find(min_cut_edges.begin(), min_cut_edges.end(), edges[jj]) == min_cut_edges.end())
+            bool no_edge_first = find(min_cut_edges.begin(), min_cut_edges.end(), edges[jj]) == min_cut_edges.end();
+            bool no_edge_second = find(min_cut_edges.begin(), min_cut_edges.end(), make_pair(edges[jj].second, edges[jj].first)) == min_cut_edges.end();
+            if (no_edge_first && no_edge_second)
             {
               e_params.joint = RIGID;
+              // ROS_INFO("Could not find edge: %d %d", edges[jj].first, edges[jj].second);
             }
             else
             {
-              string local_frame = to_string(edges[jj].first);
+              //string local_frame = to_string(edges[jj].first);
+              string local_frame = reference_frame_;
               e_params.joint = REVOLUTE;
               e_params.normal = candidate_model_bank_->TransformVector(axis, reference_frame_, local_frame);
               e_params.center = candidate_model_bank_->TransformPoint(axis_point, reference_frame_, local_frame);
+              //e_params.normal = axis;
+              //e_params.center = axis_point;
             }
             (*edge_params)[ii].push_back(e_params);
           }
-          ROS_INFO("Revolute Model %d", ii);
+          ROS_INFO("%d Revolute Model", ii);
           for (int jj = 0; jj < num_edges; ++jj)
           {
-            ROS_INFO("    %d--->%d : %d",edges[jj].first, edges[jj].second, (*edge_params)[ii][jj].joint);
+            EdgeParams e_params = (*edge_params)[ii][jj];
+            ROS_INFO("    %d--->%d : %d",edges[jj].first, edges[jj].second, e_params.joint);
+            if (e_params.joint == REVOLUTE)
+            {
+              ROS_INFO("      Axis: %f %f %f", e_params.normal.x(), e_params.normal.y(), e_params.normal.z());
+              ROS_INFO("      Center: %f %f %f", e_params.center.x(), e_params.center.y(), e_params.center.z());
+            }
           }
-          break;
         }
       case SPHERICAL:
         {
