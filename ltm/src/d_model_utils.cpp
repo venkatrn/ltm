@@ -81,6 +81,15 @@ double NormalPDF(double x, double mu, double var)
   return exp(-0.5 * Sqr((x-mu)) /var) / (sqrt(2 * var * M_PI));
 }
 
+double MultivariateNormalPDF(const geometry_msgs::Pose& p, const geometry_msgs::Pose& p_mu, double var_scaling)
+{
+  // TODO: consider orientation also?
+  Eigen::Vector3d x(p.position.x, p.position.y, p.position.z);
+  Eigen::Vector3d mu(p_mu.position.x, p_mu.position.y, p_mu.position.z);
+  Eigen::Matrix3d sigma = var_scaling*Eigen::Matrix3d::Identity();
+  return MultivariateNormalPDF(x, mu, sigma);
+}
+
 double MultivariateNormalPDF(Eigen::Vector3d x, Eigen::Vector3d mu, Eigen::Matrix3d sigma)
 {
   // Initialize inverse to identity, to avoid compiler warnings about using uninitialized matrix

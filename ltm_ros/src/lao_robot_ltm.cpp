@@ -288,13 +288,39 @@ void LAORobotLTM::UpdateStartState()
   // Set model belief. TODO: Use DModelLearner to update model probabilities based on observed data
   GetStartBelief(&start_belief_state.belief);
   d_model_bank_->SetStartState(start_belief_state);
+  previous_start_state_ = start_state_;
   return;
 }
 
 void LAORobotLTM::GetStartBelief(vector<double>* belief)
 {
+  // Make sure start_state_ has been updated
   belief->clear();
-  belief->resize(num_models_, 1.0/static_cast<double>(num_models_));
+  if (observations_.size() == 0)
+  {
+    belief->resize(num_models_, 1.0/static_cast<double>(num_models_));
+  }
+  else
+  {
+    vector<double> obs_probs;
+    d_model_bank_->GetObservationProbabilities(previous_start_state_, start_state_, executed_fprims_, &obs_probs);
+    double total_weight = 0;
+    for (int ii = 0; ii < num_models_; ++ii)
+    {
+      (*belief)[ii] *= obs_probs[ii];
+      total_weight += (*belief)[ii];
+    }
+    if (total_weight < kFPTolerance)
+    {
+      ROS_ERROR("[LAO Robot LTM]: Total weight is 0, returning uniform belief");
+      belief->resize(num_models_, 1.0/static_cast<double>(num_models_));
+      return;
+    }
+    for (int ii = 0; ii < num_models_; ++ii)
+    {
+      (*belief)[ii] /= total_weight;
+    }
+  }
   return;
 }
 
@@ -328,6 +354,10 @@ void LAORobotLTM::GetExecutionTraj(const vector<int>& all_state_ids, const vecto
     state_ids.assign(all_state_ids.begin(), all_state_ids.begin() + num_points);
     fprim_ids.assign(all_fprim_ids.begin(), all_fprim_ids.begin() + num_points);
   }
+
+  // Store the fprims, so that we can compute observation probabilities later
+  executed_fprims_ = fprim_ids;
+
   // Get forces from fprim_ids
   vector<tf::Vector3> forces;
   vector<int> grasp_points;

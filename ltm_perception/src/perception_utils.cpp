@@ -53,10 +53,10 @@ const double kMinWidth = 0.2;
 const double kMaxWidth = 5;
 // The following are PR2-specific, and assumes that reference frame is base_link
 const double kMinX = 0.1;
-const double kMaxX = 1.0;
-const double kMinY = -0.5;
-const double kMaxY = 0.5;
-const double kMinZ = 0.3;
+const double kMaxX = 2.0;
+const double kMinY = -0.75;
+const double kMaxY = 0.75;
+const double kMinZ = 0.1;
 const double kMaxZ = 2.0;
 
 // Statistical Outlier Removal
@@ -645,6 +645,28 @@ PointCloudPtr perception_utils::PassthroughFilter(PointCloudPtr cloud)
   pt_filter.setFilterLimits(kMinZ, kMaxZ);
   pt_filter.filter(*filtered_cloud);
   return filtered_cloud;
+}
+
+bool perception_utils::EvaluateRectangle(std::vector<PointT>& corners)
+{
+  assert(corners.size() == 4);
+  float max_x = -1000.0, max_y = -1000.0, max_z = -1000.0;
+  float min_x = 1000.0, min_y = 1000.0, min_z = 1000.0;
+  for (int ii = 0; ii < 4; ++ii)
+  {
+    min_x = min(min_x, corners[ii].x);
+    min_y = min(min_y, corners[ii].y);
+    min_z = min(min_z, corners[ii].z);
+    max_x = max(max_x, corners[ii].x);
+    max_y = max(max_y, corners[ii].y);
+    max_z = max(max_z, corners[ii].z);
+  }
+
+  if(min_x < kMinX || max_x > kMaxX) return false;
+  if(min_y < kMinY || max_y > kMaxY) return false;
+  if(min_z < kMinZ || max_z > kMaxZ) return false;
+
+  return true;
 }
 
 bool perception_utils::EvaluateCluster(PointCloudPtr cloud_cluster)

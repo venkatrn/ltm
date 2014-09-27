@@ -28,6 +28,7 @@ double Sqr(double num);
 double Max(double a, double b, double c);
 
 double NormalPDF(double x, double mean, double var);
+double MultivariateNormalPDF(const geometry_msgs::Pose& p, const geometry_msgs::Pose& p_mu, double var_scaling);
 double MultivariateNormalPDF(Eigen::Vector3d x, Eigen::Vector3d mu, Eigen::Matrix3d sigma);
 
 #endif /* _LTM_DMODEL_UTILS_H */

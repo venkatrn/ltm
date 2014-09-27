@@ -71,6 +71,10 @@ class LAORobotLTM
     State_t start_state_, goal_state_;
     int num_goals_received_; // Keep track of number of goals received--must match number of grasp poses.
     bool full_trajectory_execution_;
+    // Store the last internal start state and the executed sequence of forces, so that we can compute observation probabilities
+    State_t previous_start_state_;
+    std::vector<int> executed_fprims_;
+
 
     // Tracking points/ar markers
     bool ar_marker_tracking_, record_observations_, record_bag_;

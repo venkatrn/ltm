@@ -21,6 +21,7 @@ namespace perception_utils
 
   /**@brief Check if the cluster satisifies simple checks to be considered as an articulated object**/
   bool EvaluateCluster(PointCloudPtr cloud_cluster);
+  bool EvaluateRectangle(std::vector<PointT>& corners);
   /**@brief Obtain plane coefficients for segmentation**/
   pcl::ModelCoefficients::Ptr GetPlaneCoefficients(PointCloudPtr cloud);
   pcl::ModelCoefficients::Ptr GetPlaneCoefficients(PointCloudPtr cloud, PointCloudPtr inlier_points);

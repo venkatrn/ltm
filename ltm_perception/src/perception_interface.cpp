@@ -124,6 +124,10 @@ void PerceptionInterface::CloudCBInternal(const PointCloudPtr& original_cloud)
       continue;
     }
     GetRectangleCorners(rectangle_proj_points, &corners, axes);
+    if (!EvaluateRectangle(corners))
+    {
+      continue;
+    }
     if (pcl_visualization_)
     {
       string id = boost::lexical_cast<string>(ii);

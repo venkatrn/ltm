@@ -166,6 +166,9 @@ class DModelBank : public AbstractModelBank
     void SimulatePlan(int model_id, const std::vector<tf::Vector3>& forces, const std::vector<int>& grasp_points);
     void SimulatePlan(int model_id, const std::vector<int>& fprim_ids); 
 
+    /**@brief Get observation probabilities, given two internal states, and a sequence of fprims executed**/
+    void GetObservationProbabilities(const State_t& s_0, const State_t& s_1, const std::vector<int> fprim_ids, std::vector<double>* obs_probs);
+
     /**@brief Visualize belief state**/
     void VisualizeState(int model_id, int belief_state_id);
 
@@ -236,6 +239,7 @@ class DModelBank : public AbstractModelBank
 
     /**@brief Compute the changed inds and points for poses in the world frame, with respect to the inital poses set for initialization**/
     void GetChangedStateFromWorldPoses(const geometry_msgs::PoseArray& world_poses, std::vector<int>* changed_inds, geometry_msgs::PoseArray* changed_points);
+    void GetWorldPosesFromState(const State_t& state, geometry_msgs::PoseArray* world_poses);
 
     /**@brief Accessors**/
     int num_models() const {return num_models_;}

@@ -593,6 +593,36 @@ void DModelBank::GetNextState(int model_id, const geometry_msgs::PoseArray& in_p
   return;
 }
 
+void DModelBank::GetObservationProbabilities(const State_t& initial_state, const State_t& final_state, const vector<int> fprim_ids,vector<double>* obs_probs)
+{
+  const double kObsVar = 0.05; // 5 cm
+  // Note: obs_probs doesn't need to normalize
+  vector<tf::Vector3> forces;
+  vector<int> grasp_points;
+  ConvertForcePrimIDsToForcePrims(fprim_ids, &forces, &grasp_points);
+  geometry_msgs::PoseArray final_poses, initial_poses;
+  GetWorldPosesFromState(initial_state, &initial_poses);
+  GetWorldPosesFromState(final_state, &final_poses);
+  const int num_poses = int(final_poses.poses.size());
+  geometry_msgs::PoseArray in_points;
+  obs_probs->clear();
+  for (int ii = 0; ii < num_models_; ++ii)
+  {
+    in_points = initial_poses;
+    geometry_msgs::PoseArray out_points;
+    for (size_t jj = 0; jj < forces.size(); ++jj)
+    {
+      GetNextState(ii, in_points, grasp_points[jj], forces[jj], env_cfg_.sim_time_step, &out_points);
+      in_points = out_points;
+    }
+    (*obs_probs)[ii] = 1.0;
+    for (int jj = 0; jj < num_poses; ++jj)
+    {
+      (*obs_probs)[ii] *= MultivariateNormalPDF(final_poses.poses[jj], out_points.poses[jj], kObsVar);
+    }
+  }
+}
+
 void DModelBank::SimulatePlan(int model_id, const vector<int>& fprim_ids)
 {
   assert(model_id < int(edge_maps_.size()));
@@ -798,6 +828,27 @@ void DModelBank::GetSuccs(int source_state_id,
     (*succ_state_ids_map)[action_num] = it->second;
     (*succ_state_probabilities_map)[action_num] = probabilities_map[action_id];
     action_num++;
+  }
+}
+
+void DModelBank::GetWorldPosesFromState(const State_t& s, geometry_msgs::PoseArray* world_poses)
+{
+  world_poses->poses.clear();
+  for (size_t ii = 0; ii < points_.poses.size(); ++ii)
+  {
+    // If point has changed, then use the coordinates from state.
+    auto it = find(s.changed_inds.begin(),
+        s.changed_inds.end(),
+        ii);
+    if ( it != s.changed_inds.end())
+    {
+      int offset = distance(s.changed_inds.begin(), it);
+      world_poses->poses.push_back(s.changed_points.poses[offset]);
+    }
+    else
+    {
+      world_poses->poses.push_back(points_.poses[ii]);
+    }
   }
 }
 
