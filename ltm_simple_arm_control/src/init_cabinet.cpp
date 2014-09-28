@@ -70,6 +70,8 @@ int main(int argc, char** argv){
     l_init[5] = -2.002;
     l_init[6] = -21.941;
         
+     
+     // This works
     r_init[0] = 0.564;
     r_init[1] = 1.296;
     r_init[2] = -0.042;
@@ -77,6 +79,16 @@ int main(int argc, char** argv){
     r_init[4] = -3.273;
     r_init[5] = -1.644;
     r_init[6] = -40.441;
+    
+    /*
+    r_init[0] = -0.376;
+    r_init[1] = 1.297;
+    r_init[2] = -0.732;
+    r_init[3] = -2.021;
+    r_init[4] = -116.207;
+    r_init[5] = -1.626;
+    r_init[6] = 47.407;
+    */
 
     r_arm.sendArmToConfiguration(&r_init[0],3);
     l_arm.sendArmToConfiguration(&l_init[0],3);

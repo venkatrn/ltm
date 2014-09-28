@@ -504,125 +504,6 @@ void DModelLearner::PlanesToKinematicModels(const ltm_msgs::PolygonArrayStamped 
   }
 }
 
-/*
-void DModelLearner::GenerateModels(const geometry_msgs::PoseArray& points, const std::vector<Edge>& edges, const std::vector<AbstractKinematicModel*>& kinematic_models, std::vector<std::vector<EdgeParams>>* edge_params)
-{
-  edge_params->clear();
-  const int num_edges = edges.size(); 
-  if (num_edges == 0)
-  {
-    ROS_WARN("[DModel Learner]: No edges in the model");
-    return;
-  }
-  const int num_models = kinematic_models.size();
-  if (num_models == 0)
-  {
-    ROS_WARN("[DModel Learner]: No kinematic models available to compute edge parameteres");
-    return;
-  }
-  edge_params->resize(num_models);
-  // Make sure tf is available, so that we can set the model params in the local frames
-  candidate_model_bank_->TFCallback(points);
-
-  for (int ii = 0; ii < num_models; ++ii)
-  {
-    const AbstractKinematicModel* kinematic_model = kinematic_models[ii];
-    JointType joint_type = kinematic_model->joint_type();
-    switch(joint_type)
-    {
-      case PRISMATIC:
-        {
-          const PrismaticModel* prismatic_model = dynamic_cast<const PrismaticModel*>(kinematic_model);
-          tf::Vector3 axis = prismatic_model->axis();
-          for (int jj = 0; jj < num_edges; ++jj)
-          {
-            tf::Point p1, p2;
-            tf::pointMsgToTF(points.poses[edges[jj].first].position, p1);
-            tf::pointMsgToTF(points.poses[edges[jj].second].position, p2);
-            tf::Vector3 edge = p1 - p2;
-            edge.normalize();
-            EdgeParams e_params;
-            if (fabs(edge.dot(axis)) < 0.1)
-            {
-              e_params.joint = RIGID;
-            }
-            else
-            {
-              string local_frame = to_string(edges[jj].first);
-              e_params.joint = PRISMATIC;
-              e_params.normal = candidate_model_bank_->TransformVector(axis, reference_frame_, local_frame);
-            }
-            (*edge_params)[ii].push_back(e_params);
-          }
-          ROS_INFO("Model %d", ii);
-          for (int jj = 0; jj < num_edges; ++jj)
-          {
-            EdgeParams e_params = (*edge_params)[ii][jj];
-            ROS_INFO("    %d--->%d : %d",edges[jj].first, edges[jj].second, e_params.joint);
-            if (e_params.joint == PRISMATIC)
-            {
-              ROS_INFO("      Axis: %f %f %f", e_params.normal.x(), e_params.normal.y(), e_params.normal.z());
-            }
-          }
-          break;
-        }
-      case REVOLUTE:
-        {
-          const RevoluteModel* revolute_model = dynamic_cast<const RevoluteModel*>(kinematic_model);
-          tf::Vector3 axis = revolute_model->axis();
-          tf::Vector3 axis_point = revolute_model->axis_point();
-          for (int jj = 0; jj < num_edges; ++jj)
-          {
-            tf::Point p1, p2;
-            tf::pointMsgToTF(points.poses[edges[jj].first].position, p1);
-            tf::pointMsgToTF(points.poses[edges[jj].second].position, p2);
-            tf::Vector3 p1_projection = p1.dot(axis) * axis;
-            tf::Vector3 p2_projection = p2.dot(axis) * axis;
-            tf::Vector3 p1_center = axis_point + p1_projection;
-            tf::Vector3 p2_center = axis_point + p2_projection;
-            tf::Vector3 p1_arm = p1 - p1_center;
-            tf::Vector3 p2_arm = p2 - p2_center;
-            p1_arm.normalize();
-            p2_arm.normalize();
-            EdgeParams e_params;
-            if (fabs(p1_arm.dot(p2_arm)) < 0.9)
-            {
-              e_params.joint = RIGID;
-            }
-            else
-            {
-              string local_frame = to_string(edges[jj].first);
-              e_params.joint = REVOLUTE;
-              e_params.normal = candidate_model_bank_->TransformVector(axis, reference_frame_, local_frame);
-              e_params.center = candidate_model_bank_->TransformPoint(axis_point, reference_frame_, local_frame);
-            }
-            (*edge_params)[ii].push_back(e_params);
-          }
-          ROS_INFO("Model %d", ii);
-          for (int jj = 0; jj < num_edges; ++jj)
-          {
-            EdgeParams e_params = (*edge_params)[ii][jj];
-            ROS_INFO("    %d--->%d : %d",edges[jj].first, edges[jj].second, e_params.joint);
-            if (e_params.joint == REVOLUTE)
-            {
-              ROS_INFO("      Axis: %f %f %f", e_params.normal.x(), e_params.normal.y(), e_params.normal.z());
-              ROS_INFO("      Center: %f %f %f", e_params.center.x(), e_params.center.y(), e_params.center.z());
-            }
-          }
-          break;
-        }
-      case SPHERICAL:
-        {
-          const SphericalModel* spherical_model = dynamic_cast<const SphericalModel*>(kinematic_model);
-          //TODO: Implement
-          break;
-        }
-      default:
-        ROS_INFO("[DModelLearner]: Unsupported model type in autogeneration of models");
-    }
-  }
-}
-*/
 void DModelLearner::GenerateModelsMinCut(const geometry_msgs::PoseArray& points, const std::vector<Edge>& edges, const std::vector<AbstractKinematicModel*>& kinematic_models, std::vector<std::vector<EdgeParams>>* edge_params)
 {
   edge_params->clear();
@@ -671,7 +552,6 @@ void DModelLearner::GenerateModelsMinCut(const geometry_msgs::PoseArray& points,
             tf::Vector3 normalized_edge = edge.normalized();
             d_weight = edge.length2();
             p_weight = fabs(normalized_edge.dot(axis));
-            p_weight = 0;
             total_weight = exp(-(kAlphaDist * d_weight + kAlphaAngle * p_weight));
             weights[edges[jj].first][edges[jj].second] = total_weight;
             weights[edges[jj].second][edges[jj].first] = total_weight;
@@ -728,15 +608,14 @@ void DModelLearner::GenerateModelsMinCut(const geometry_msgs::PoseArray& points,
             tf::pointMsgToTF(points.poses[edges[jj].first].position, p1);
             tf::pointMsgToTF(points.poses[edges[jj].second].position, p2);
             tf::Vector3 edge = p1 - p2;
-            tf::Vector3 p1_projection = p1.dot(axis) * axis;
-            tf::Vector3 p2_projection = p2.dot(axis) * axis;
+            tf::Vector3 p1_projection = (p1-axis_point).dot(axis) * axis;
+            tf::Vector3 p2_projection = (p2-axis_point).dot(axis) * axis;
             tf::Vector3 p1_center = axis_point + p1_projection;
             tf::Vector3 p2_center = axis_point + p2_projection;
             tf::Vector3 p1_arm = (p1 - p1_center), p2_arm = (p2 - p2_center);
             p1_arm.normalize(); p2_arm.normalize();
             d_weight = edge.length2();
             r_weight = p1_arm.cross(p2_arm).length();
-            r_weight = 0;
             total_weight = exp(-(kAlphaDist * d_weight + kAlphaAngle * r_weight));
             weights[edges[jj].first][edges[jj].second] = total_weight;
             weights[edges[jj].second][edges[jj].first] = total_weight;

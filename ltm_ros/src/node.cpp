@@ -16,6 +16,9 @@ int main(int argc, char** argv)
   ros::init(argc, argv, "ltm_node");
   //RobotLTM robot_ltm;
   LAORobotLTM lao_robot_ltm;
-  ros::spin();
+  //ros::spin();
+  ros::AsyncSpinner spinner(4); 
+  spinner.start(); 
+  ros::waitForShutdown();
   return 0;
 }

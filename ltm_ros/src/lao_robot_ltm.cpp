@@ -19,8 +19,7 @@ using namespace std;
 
 LAORobotLTM::LAORobotLTM() : num_goals_received_(0),
                              record_observations_(false),
-                             record_bag_(false),
-                             full_trajectory_execution_(true)
+                             record_bag_(false)
 {
   ros::NodeHandle private_nh("~");
   private_nh.param("use_model_file", use_model_file_, false);
@@ -32,6 +31,7 @@ LAORobotLTM::LAORobotLTM() : num_goals_received_(0),
   private_nh.param("bag_file", bag_file_, string("observations.bag"));
   private_nh.param("reference_frame", reference_frame_, string("/map"));
   private_nh.param("sim_time_step", sim_time_step_, 0.1);
+  private_nh.param("full_trajectory_execution", full_trajectory_execution_, true);
 
   grasp_idxs_.clear();
 
@@ -56,6 +56,8 @@ LAORobotLTM::LAORobotLTM() : num_goals_received_(0),
   else
   {
     num_models_ = model_files_.size();
+    current_belief_.clear();
+    current_belief_.resize(num_models_, 1.0/static_cast<double>(num_models_));
     vector<double> empty_model_offsets;
     empty_model_offsets.resize(num_models_);
     private_nh.param("model_offsets_x", model_offsets_x_, empty_model_offsets);
@@ -78,6 +80,8 @@ LAORobotLTM::LAORobotLTM() : num_goals_received_(0),
   // Initialize IK clients
   query_client_ = nh_.serviceClient<kinematics_msgs::GetKinematicSolverInfo>("pr2_right_arm_kinematics/get_ik_solver_info");
   ik_client_ = nh_.serviceClient<kinematics_msgs::GetPositionIK>("pr2_right_arm_kinematics/get_ik");
+  // Initialize arm
+  r_arm_ = new Arm("right");
 }
 
 LAORobotLTM::~LAORobotLTM() 
@@ -85,6 +89,7 @@ LAORobotLTM::~LAORobotLTM()
   delete d_model_bank_;
   delete planner_;
   delete learner_;
+  if (r_arm_ != nullptr) delete r_arm_;
 }
 
 void LAORobotLTM::LearnCB(const std_msgs::Int32ConstPtr& learning_mode)
@@ -163,6 +168,8 @@ void LAORobotLTM::LearnCB(const std_msgs::Int32ConstPtr& learning_mode)
     learner_->PlanesToKinematicModels(rectangles_, &kinematic_models);
     learner_->GenerateModelsMinCut(d_model_bank_->GetDModelPoints(), edges, kinematic_models, &edge_params);
     num_models_ = edge_params.size();
+    current_belief_.clear();
+    current_belief_.resize(num_models_, 1.0/static_cast<double>(num_models_));
     d_model_bank_->InitFromObs(edges, edge_params); 
     ROS_INFO("LTM Node: Initialized model from live observation\n");
     return;
@@ -252,7 +259,7 @@ void LAORobotLTM::PlanAndExecute()
   GetExecutionTraj(state_ids, fprim_ids, &traj);
 
   // Publish end-effector trajectory
-  plan_pub_.publish(traj);
+  // plan_pub_.publish(traj);
 }
 
 void LAORobotLTM::UpdateStartState()
@@ -264,29 +271,32 @@ void LAORobotLTM::UpdateStartState()
   }
   start_state_.grasp_idx = grasp_idxs_[0];
   assert(observations_.size() != 0);
-  // Must append the grasp poses to AR marker poses--need the TF's for the changed points first
-  //TODO: smarter way to do this
-  tf::Transform transform;
-  for (size_t ii = 0; ii < last_observed_pose_.poses.size(); ++ii)
-  {
-    static tf::TransformBroadcaster tf_br_;
-    geometry_msgs::Pose p = last_observed_pose_.poses[ii];
-    transform.setOrigin(tf::Vector3(p.position.x, p.position.y, p.position.z) );
-    transform.setRotation(tf::Quaternion(p.orientation.x, p.orientation.y, p.orientation.z, p.orientation.w));
-    string child_frame_id = boost::lexical_cast<string>(ii); //assuming the idxs are same until the grasp idxx
-    tf_br_.sendTransform(tf::StampedTransform(transform, ros::Time::now(), reference_frame_.c_str(), child_frame_id.c_str()));
-  }
 
   geometry_msgs::PoseArray appended_poses;
   ObservationsToModelPoses(last_observed_pose_, &appended_poses);
   d_model_bank_->GetChangedStateFromWorldPoses(appended_poses, &start_state_.changed_inds, &start_state_.changed_points);
-    ROS_INFO("[LAO Robot LTM]: %d points have changed in the start state", start_state_.changed_inds.size());
+  //ROS_INFO("[LAO Robot LTM]: %d points have changed in the start state", start_state_.changed_inds.size());
+  geometry_msgs::Pose p = appended_poses.poses[grasp_idxs_[0]];
+  ROS_WARN("[LAO Robot LTM]: New start pose: %f %f %f", p.position.x, p.position.y, p.position.z);
   d_model_bank_->SetInternalStartState(start_state_);
 
   BeliefState_t start_belief_state;
   start_belief_state.internal_state_id = d_model_bank_->GetInternalStartStateID();
   // Set model belief. TODO: Use DModelLearner to update model probabilities based on observed data
   GetStartBelief(&start_belief_state.belief);
+
+  // Debug
+  std::stringstream ss;
+  for (int ii = 0; ii < num_models_; ++ii)
+  {
+    ss << start_belief_state.belief[ii] << " ";
+  }
+  string s = ss.str();
+  ROS_WARN("New start state belief: %s", s.c_str());
+  //TODO: remove this
+  start_belief_state.belief.clear();
+  start_belief_state.belief.resize(num_models_, 1.0/static_cast<double>(num_models_));
+
   d_model_bank_->SetStartState(start_belief_state);
   previous_start_state_ = start_state_;
   return;
@@ -296,15 +306,30 @@ void LAORobotLTM::GetStartBelief(vector<double>* belief)
 {
   // Make sure start_state_ has been updated
   belief->clear();
-  if (observations_.size() == 0)
+  //ROS_INFO("Number of executed fprims: %d", executed_fprims_.size());
+  //ROS_INFO("[LAO Robot LTM]: %d changed points in the start state", start_state_.changed_inds.size());
+  //ROS_INFO("[LAO Robot LTM]: %d changed points in the prev start state", previous_start_state_.changed_inds.size());
+  bool start_state_unchanged = (previous_start_state_ == start_state_);
+  if (start_state_unchanged)
   {
-    belief->resize(num_models_, 1.0/static_cast<double>(num_models_));
+    ROS_INFO("Start state is unchanged");
+  }
+  if (executed_fprims_.size() == 0 || start_state_unchanged)
+  {
+    *belief = current_belief_;
+    // If the start state did not change, I am assuming that we dint see the AR markers.
+    // So I ll run the full trajectory instead
+    if (executed_fprims_.size() != 0)
+    {
+      full_trajectory_execution_ = true;
+    }
   }
   else
   {
     vector<double> obs_probs;
     d_model_bank_->GetObservationProbabilities(previous_start_state_, start_state_, executed_fprims_, &obs_probs);
     double total_weight = 0;
+    *belief = current_belief_;
     for (int ii = 0; ii < num_models_; ++ii)
     {
       (*belief)[ii] *= obs_probs[ii];
@@ -326,25 +351,28 @@ void LAORobotLTM::GetStartBelief(vector<double>* belief)
 
 void LAORobotLTM::GetExecutionTraj(const vector<int>& all_state_ids, const vector<int>& all_fprim_ids, geometry_msgs::PoseArray* traj)
 {
-  // Truncate trajectory
-  const int num_points = 4;
-  if (num_points == int(all_state_ids.size()))
+  std_msgs::Int32Ptr exec_mode_ptr(new std_msgs::Int32);
+  exec_mode_ptr->data = 1;
+  if (all_state_ids.size() < 2 || all_fprim_ids.size() == 0)
   {
-    full_trajectory_execution_ = true;
-  }
-  else
-  {
-    full_trajectory_execution_ = false;
-  }
-  vector<int> state_ids, fprim_ids;
-  assert(all_state_ids.size() == all_fprim_ids.size()); // TODO: this must change
-  if (all_state_ids.size() < 2)
-  {
-    ROS_ERROR("[LAO Robot LTM]: Trajectory has less than 2 waypoints");
+    ROS_WARN("[LAO Robot LTM]: Trajectory has less than 2 waypoints. Assuming we are at the goal");
     traj->poses.clear();
+    TrajExecCB(exec_mode_ptr);
     return;
   }
-  else if (num_points > all_state_ids.size())
+  // Truncate trajectory
+  int num_points;
+  if (full_trajectory_execution_)
+  {
+    num_points = all_state_ids.size();
+  }
+  else 
+  {
+    num_points = 4;
+  }
+  vector<int> state_ids, fprim_ids;
+  assert(all_state_ids.size() == all_fprim_ids.size() + 1);
+  if (num_points > all_state_ids.size())
   {
     state_ids = all_state_ids;
     fprim_ids = all_fprim_ids;
@@ -352,11 +380,15 @@ void LAORobotLTM::GetExecutionTraj(const vector<int>& all_state_ids, const vecto
   else
   {
     state_ids.assign(all_state_ids.begin(), all_state_ids.begin() + num_points);
-    fprim_ids.assign(all_fprim_ids.begin(), all_fprim_ids.begin() + num_points);
+    fprim_ids.assign(all_fprim_ids.begin(), all_fprim_ids.begin() + num_points - 1);
   }
 
-  // Store the fprims, so that we can compute observation probabilities later
-  executed_fprims_ = fprim_ids;
+  bool approach = false;
+  if (executed_fprims_.size() == 0)
+  {
+    approach = true;
+  }
+
 
   // Get forces from fprim_ids
   vector<tf::Vector3> forces;
@@ -377,14 +409,9 @@ void LAORobotLTM::GetExecutionTraj(const vector<int>& all_state_ids, const vecto
   d_model_bank_->GetEndEffectorTrajFromStateIDs(state_ids, traj);
 
   // Simulate plan 
-  // d_model_->SimulatePlan(fprim_ids);
   // TODO: Hardcoded model id for visualization--doesn't matter since the actual model is not used for
   // visualization
   SimulatePlan(0, *traj, state_ids, forces, grasp_points);
-  // TODO: Currently faking execution
-  // std_msgs::Int32Ptr exec_mode_ptr(new std_msgs::Int32);
-  // exec_mode_ptr->data = 1;
-  // TrajExecCB(exec_mode_ptr);
 
   //Print end effector trajectory
   printf("End-Effector Trajectory:\n");
@@ -394,24 +421,81 @@ void LAORobotLTM::GetExecutionTraj(const vector<int>& all_state_ids, const vecto
         (*traj).poses[ii].orientation.x, (*traj).poses[ii].orientation.y, (*traj).poses[ii].orientation.z, (*traj).poses[ii].orientation.w);
   }
 
-  return; 
+  if ((*traj).poses.size() == 0)
+  {
+    ROS_WARN("Execution trajectory has no waypoints");
+    return;
+  }
+
+  ROS_INFO("Executing trajectory");
+  std::vector<double> current_angles;
+  r_arm_->getCurrentArmConfiguration(current_angles);
+  if (approach)
+  {
+    ROS_INFO("Beginning approach...");
+    geometry_msgs::PoseStamped first_pose;
+    first_pose.header = (*traj).header;
+    first_pose.pose = (*traj).poses[0];
+    r_arm_->openGripper();
+    sleep(2.0); // wait for gripper to open
+    r_arm_->sendArmToPose(first_pose, current_angles, 4.0); //4.0
+    r_arm_->closeGripper();
+    sleep(2.0); // wait for gripper to close
+  }
+  //std::vector<double> move_times;
+  //move_times.resize((*traj).poses.size(), 3.0);
+  //r_arm_->sendArmToPoses(*traj, current_angles, move_times);
+  // Skip the first waypoint
+  for (int ii = 1; ii < (*traj).poses.size(); ++ii)
+  {
+    r_arm_->getCurrentArmConfiguration(current_angles);
+    geometry_msgs::PoseStamped pose;
+    pose.header = (*traj).header;
+    pose.pose = (*traj).poses[ii];
+    r_arm_->closeGripper();
+    if(!r_arm_->sendArmToPose(pose, current_angles, 1.0)) //TODO: compute this using joint velocity limits //2.0
+    {
+      std::vector<double> r_init(7,0);
+      // Take guarded action
+      r_init[0] =-0.23117967578398957;
+      r_init[1] =1.0769730178922747;
+      r_init[2] =0.019446379058501773;
+      r_init[3] =-1.9621954289305932;
+      r_init[4] =-2.8490612115504246;
+      r_init[5] =-1.979940509361753;
+      r_init[6] =-3.1167221313806674;
+      r_arm_->openGripper();
+      sleep(2.0); // wait for gripper to open
+      r_arm_->sendArmToConfiguration(&r_init[0],3);
+      ii = ii - 1;
+      continue;
+    }
+  }
+  ROS_INFO("Finished executing trajectory");
+
+  // Store the fprims, so that we can compute observation probabilities later
+  executed_fprims_ = fprim_ids;
+  TrajExecCB(exec_mode_ptr);
+  return;
 }
 
 void LAORobotLTM::TrajExecCB(const std_msgs::Int32ConstPtr& exec_mode_ptr)
 {
+  sleep(2.0); //make sure AR marker poses have updated
   int exec_mode = static_cast<int>(exec_mode_ptr->data);
   State_t temp_goal_state;
   temp_goal_state.grasp_idx = grasp_idxs_[0]; //TODO: this will fail for multi-grasp points
   geometry_msgs::PoseArray appended_poses;
   ObservationsToModelPoses(last_observed_pose_, &appended_poses);
   d_model_bank_->GetChangedStateFromWorldPoses(appended_poses, &temp_goal_state.changed_inds, &temp_goal_state.changed_points);
-  if (!full_trajectory_execution_ && d_model_bank_->IsInternalGoalState(temp_goal_state)) 
+  if (full_trajectory_execution_ || d_model_bank_->IsInternalGoalState(temp_goal_state)) 
   {
     // Success--reset goal state to be ready for next goal request
     ROS_INFO("[LTM Node]: Task completed successfully, ready for new goal request");
     num_goals_received_ = 0;
     goal_state_.changed_inds.clear();
     goal_state_.changed_points.poses.clear();
+    r_arm_->openGripper();
   }
   else
   {
@@ -553,9 +637,18 @@ void LAORobotLTM::ARMarkersCB(const ar_track_alvar_msgs::AlvarMarkersConstPtr& a
     observations_.push_back(pose_array);
   }
   last_observed_pose_ = pose_array;
+  /*
+  if (grasp_idxs_.size() != 0)
+  {
+    geometry_msgs::PoseArray appended_poses;
+    ObservationsToModelPoses(last_observed_pose_, &appended_poses);
+    geometry_msgs::Pose grasp_pose = appended_poses.poses[grasp_idxs_[0]];
+    geometry_msgs::Pose zero_pose = appended_poses.poses[0];
+    ROS_INFO("Latest 0 pose: %f %f %f", zero_pose.position.x, zero_pose.position.y, zero_pose.position.z);
+    ROS_INFO("Latest grasp pose: %f %f %f", grasp_pose.position.x, grasp_pose.position.y, grasp_pose.position.z);
+  }
+  */
 
-  // Grab the kinect data and other stuff needed
-  //sleep(1);
   return;
 }
 
@@ -758,6 +851,18 @@ bool LAORobotLTM::GetRightIK(const vector<double>& ik_pose, const vector<double>
 
 void LAORobotLTM::ObservationsToModelPoses(const geometry_msgs::PoseArray& observations, geometry_msgs::PoseArray* appended_poses)
 {
+  // Must append the grasp poses to AR marker poses--need the TF's for the changed points first
+  //TODO: smarter way to do this
+  tf::Transform transform;
+  for (size_t ii = 0; ii < last_observed_pose_.poses.size(); ++ii)
+  {
+    static tf::TransformBroadcaster tf_br_;
+    geometry_msgs::Pose p = last_observed_pose_.poses[ii];
+    transform.setOrigin(tf::Vector3(p.position.x, p.position.y, p.position.z) );
+    transform.setRotation(tf::Quaternion(p.orientation.x, p.orientation.y, p.orientation.z, p.orientation.w));
+    string child_frame_id = boost::lexical_cast<string>(ii); //assuming the idxs are same until the grasp idxx
+    tf_br_.sendTransform(tf::StampedTransform(transform, ros::Time::now(), reference_frame_.c_str(), child_frame_id.c_str()));
+  }
   appended_poses->poses = observations.poses;
   for (int ii = 0; ii < local_grasp_poses_.size(); ++ii)
   { 

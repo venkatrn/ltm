@@ -14,6 +14,7 @@
   <depend package="ltm"/>
   <depend package="ltm_msgs"/>
   <depend package="pviz"/>
+  <depend package="pr2_arm_utils"/>
   <depend package="pcl_ros"/>
   <depend package="roscpp"/>
   <depend package="rosbag"/>

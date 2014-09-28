@@ -21,7 +21,7 @@
 // Multiplier for edge costs to avoid working with floating point numbers.
 const double kCostMultiplier = 1e3;
 // Error tolerance for comparing goal point locations.
-const double kGoalTolerance = 0.25; //0.05, 0.01 for experiments //0.25
+const double kGoalTolerance = 0.2; //0.05, 0.01 for experiments //0.25
 
 using namespace std;
 
@@ -593,9 +593,9 @@ void DModelBank::GetNextState(int model_id, const geometry_msgs::PoseArray& in_p
   return;
 }
 
-void DModelBank::GetObservationProbabilities(const State_t& initial_state, const State_t& final_state, const vector<int> fprim_ids,vector<double>* obs_probs)
+void DModelBank::GetObservationProbabilities(const State_t& initial_state, const State_t& final_state, const vector<int> fprim_ids, vector<double>* obs_probs)
 {
-  const double kObsVar = 0.05; // 5 cm
+  const double kObsVar = 0.01; // 20 cm // 1 cm
   // Note: obs_probs doesn't need to normalize
   vector<tf::Vector3> forces;
   vector<int> grasp_points;
@@ -604,20 +604,23 @@ void DModelBank::GetObservationProbabilities(const State_t& initial_state, const
   GetWorldPosesFromState(initial_state, &initial_poses);
   GetWorldPosesFromState(final_state, &final_poses);
   const int num_poses = int(final_poses.poses.size());
+  //ROS_INFO("In poses: %d, Out poses: %d", initial_poses.poses.size(), final_poses.poses.size());
   geometry_msgs::PoseArray in_points;
   obs_probs->clear();
+  obs_probs->resize(num_models_, 1.0);
   for (int ii = 0; ii < num_models_; ++ii)
   {
     in_points = initial_poses;
-    geometry_msgs::PoseArray out_points;
+    geometry_msgs::PoseArray out_points = in_points;
     for (size_t jj = 0; jj < forces.size(); ++jj)
     {
       GetNextState(ii, in_points, grasp_points[jj], forces[jj], env_cfg_.sim_time_step, &out_points);
+      //ROS_INFO("In points: %d, Out points: %d", in_points.poses.size(), out_points.poses.size());
       in_points = out_points;
     }
-    (*obs_probs)[ii] = 1.0;
     for (int jj = 0; jj < num_poses; ++jj)
     {
+      //ROS_INFO("There are %d points in out_poses", out_points.poses.size());
       (*obs_probs)[ii] *= MultivariateNormalPDF(final_poses.poses[jj], out_points.poses[jj], kObsVar);
     }
   }
@@ -1177,8 +1180,7 @@ bool DModelBank::ConvertForcePrimIDsToForcePrims(const vector<int>& fprim_ids, v
 {
   forces->clear();
   grasp_points->clear();
-  // Skip the start state
-  for (size_t ii = 1; ii < fprim_ids.size(); ++ii)
+  for (size_t ii = 0; ii < fprim_ids.size(); ++ii)
   {
     //TODO: Check this
     /*
@@ -1201,6 +1203,8 @@ bool DModelBank::GetEndEffectorTrajFromStateIDs(const std::vector<int>& state_id
     geometry_msgs::PoseArray* traj)
 {
   traj->poses.clear();
+  traj->header.frame_id = reference_frame_;
+  traj->header.stamp = ros::Time::now();
   for (size_t ii = 0; ii < state_ids.size(); ++ii)
   {
     BeliefState_t belief_state = BeliefStateIDToState(state_ids[ii]);

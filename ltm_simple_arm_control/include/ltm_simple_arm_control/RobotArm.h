@@ -5,7 +5,7 @@
 
 typedef actionlib::SimpleActionClient< pr2_controllers_msgs::JointTrajectoryAction > TrajClient;
 
-const double kMaxJointVel = 1.0;//0.5
+const double kMaxJointVel = 0.3;//0.5
 
 class RobotRightArm
 {

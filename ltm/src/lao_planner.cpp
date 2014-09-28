@@ -98,6 +98,8 @@ void LAOPlanner::DFSTraversal(vector<int>* traversal)
   }
 }
 
+// The planner will return all waypoints, and force prims for each waypoint except the last one.
+// So state_ids.size() = fprim_ids.size() + 1
 void LAOPlanner::ReconstructOptimisticPath(std::vector<int>* state_ids, std::vector<int>* fprim_ids)
 {
   ROS_INFO("[LAO Planner]: Reconstructing optimistic path");
@@ -114,7 +116,7 @@ void LAOPlanner::ReconstructOptimisticPath(std::vector<int>* state_ids, std::vec
   // Until terminal state is reached
   while (current_state.best_vec_idx != -1 && !model_bank_->IsGoalState(current_state.state_id))
   {
-    ROS_INFO("State: %d, Val: %f", current_state.state_id, current_state.v);
+    //ROS_INFO("State: %d, Val: %f", current_state.state_id, current_state.v);
     int best_vec_idx = current_state.best_vec_idx;
     vector<int> succ_state_ids = current_state.succ_state_ids_map[best_vec_idx];
     double min_val = numeric_limits<double>::max();
@@ -138,8 +140,11 @@ void LAOPlanner::ReconstructOptimisticPath(std::vector<int>* state_ids, std::vec
     current_state = PlannerStateMap[optimistic_succ_id];
     //TODO: Check v-values are non-increasing
     state_ids->push_back(current_state.state_id);
-    //TODO: don't push in the fprim for the goal state
-    fprim_ids->push_back(current_state.best_action_id);
+    //Don't push in the fprim for the goal state
+    if (current_state.best_vec_idx != -1 && !model_bank_->IsGoalState(current_state.state_id))
+    {
+      fprim_ids->push_back(current_state.best_action_id);
+    }
   }
   ROS_INFO("[LAO Planner]: Path reconstruction successful");
   return;
@@ -195,7 +200,7 @@ bool LAOPlanner::Plan(vector<int>* state_ids, vector<int>* fprim_ids)
       // TODO: Update this. Search ends if state being expanded is a goal state 
       if (model_bank_->IsGoalState(s.state_id))
       {
-        ROS_INFO("[LAO Planner]: Goal state has been found\n");
+        //ROS_INFO("[LAO Planner]: Goal state has been found\n");
         exists_non_terminal_states = false;
         goal_state_id_ = s.state_id;
         goal_state = s;
@@ -290,7 +295,7 @@ bool LAOPlanner::Plan(vector<int>* state_ids, vector<int>* fprim_ids)
   // Reconstruct path
   ROS_INFO("[LAO Planner]: Finished planning");
   SolutionValueIteration();
-  ROS_INFO("[LAO Planner]: Finished value iteration");
+  //ROS_INFO("[LAO Planner]: Finished value iteration");
   ReconstructOptimisticPath(state_ids, fprim_ids);
   // PrintPlannerStateMap();
   return true;
@@ -344,7 +349,7 @@ void LAOPlanner::SolutionValueIteration()
       // Update the state in PlannerStateMap
       PlannerStateMap[s.state_id] = s;
     }
-    ROS_INFO("[LAO Planner]: VI Iteration %d, Error: %f", iter, error);
+    //ROS_INFO("[LAO Planner]: VI Iteration %d, Error: %f", iter, error);
   }
   if (iter == max_iter)
   {

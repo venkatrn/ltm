@@ -26,6 +26,7 @@
 #include <ar_track_alvar_msgs/AlvarMarkers.h>
 
 #include <pviz/pviz.h>
+#include <pr2_arm_utils/arm.h>
 
 #include <tf/transform_listener.h>
 
@@ -74,6 +75,7 @@ class LAORobotLTM
     // Store the last internal start state and the executed sequence of forces, so that we can compute observation probabilities
     State_t previous_start_state_;
     std::vector<int> executed_fprims_;
+    std::vector<double> current_belief_;
 
 
     // Tracking points/ar markers
@@ -137,6 +139,9 @@ class LAORobotLTM
     bool GetRightIK(const std::vector<double>& ik_pose, const std::vector<double>& seed, std::vector<double>* angles);
     /**@brief Get the DModel poses (appended with grasp poses) from AR marker poses**/
     void ObservationsToModelPoses(const geometry_msgs::PoseArray& observations, geometry_msgs::PoseArray* appended_poses);
+
+    // PR2 arm controllers
+    Arm* r_arm_;
 
 };
 #endif /* _LTM_ROS_LAO_ROBOT_LTM_H_ */

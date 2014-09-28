@@ -43,6 +43,11 @@ struct State_t
       return false;
     }
 
+    if (changed_inds.size() != s.changed_inds.size())
+    {
+      return false;
+    }
+
     for (size_t ii = 0; ii < changed_inds.size(); ++ii)
     {
       auto it = std::find(s.changed_inds.begin(), s.changed_inds.end(), changed_inds[ii]);
