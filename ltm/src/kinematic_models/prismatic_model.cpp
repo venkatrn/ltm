@@ -42,7 +42,7 @@ void PrismaticModel::Transform(geometry_msgs::PoseArray in_poses, geometry_msgs:
 {
   // Force and pose need to be in reference_frame_
   tf::Vector3 projected_force = force.dot(axis_) * axis_;
-  const double mass = 1.0;
+  const double mass = 4.0; //1.0
   tf::Vector3 displacement = 0.5*Sqr(del_t)*projected_force/mass;
   out_poses->poses.clear();
   for (size_t ii = 0; ii < in_poses.poses.size(); ++ii)

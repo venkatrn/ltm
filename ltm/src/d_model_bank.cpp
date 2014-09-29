@@ -22,6 +22,8 @@
 const double kCostMultiplier = 1e3;
 // Error tolerance for comparing goal point locations.
 const double kGoalTolerance = 0.2; //0.05, 0.01 for experiments //0.25
+const double kGoalEndEffDisp = 0.6;
+const bool kNoGoal = true;
 
 using namespace std;
 
@@ -1050,13 +1052,14 @@ bool DModelBank::IsInternalGoalState(int state_id)
   State_t goal_state = StateIDToState(env_cfg_.internal_goal_state_id);
 
   //Experimental
-  /*
-  geometry_msgs::PoseArray state_poses;
-  GetWorldPosesFromState(s, &state_poses);
-  if (Dist(state_poses.poses[grasp_idxs_[0]].position, points_.poses[grasp_idxs_[0]].position)<1.5)
-    return false;
-  return true;
-  */
+  if (kNoGoal)
+  {
+    geometry_msgs::PoseArray state_poses;
+    GetWorldPosesFromState(s, &state_poses);
+    if (Dist(state_poses.poses[grasp_idxs_[0]].position, points_.poses[grasp_idxs_[0]].position)<kGoalEndEffDisp)
+      return false;
+    return true;
+  }
   
 
   for (size_t ii = 0; ii < goal_state.changed_inds.size(); ++ii)
@@ -1110,11 +1113,12 @@ double DModelBank::GetInternalGoalHeuristic(int internal_state_id)
 
 
   //Experimental
-  /*
-  geometry_msgs::PoseArray state_poses;
-  GetWorldPosesFromState(s, &state_poses);
-  return kCostMultiplier*max(0.0, 1.5 - Dist(state_poses.poses[grasp_idxs_[0]].position, points_.poses[grasp_idxs_[0]].position))/env_cfg_.sim_time_step;
-  */
+  if (kNoGoal)
+  {
+    geometry_msgs::PoseArray state_poses;
+    GetWorldPosesFromState(s, &state_poses);
+    return kCostMultiplier*max(0.0, kGoalEndEffDisp - Dist(state_poses.poses[grasp_idxs_[0]].position, points_.poses[grasp_idxs_[0]].position))/env_cfg_.sim_time_step;
+  }
 
   for (size_t ii = 0; ii < grasp_idxs_.size(); ++ii)
   {

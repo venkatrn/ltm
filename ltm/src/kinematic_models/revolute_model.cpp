@@ -95,6 +95,15 @@ void RevoluteModel::Transform(geometry_msgs::PoseArray in_poses, geometry_msgs::
   tf::Vector3 tangent = axis_.cross(arm);
   tangent.normalize();
   tf::Vector3 projected_force = tangent.dot(force) * tangent;
+  // NOTE: This model is not the best because its too conservative. Revolute joints in the real world
+  // move quite a distance even when the projection of the force on the tangent is very small. So I am
+  // accounting for this by ignoring the angle when its reasonably small
+  /*
+  if (fabs(tangent.dot(force)/force.length()) > 0.1) // small cos(\theta)
+  {
+    projected_force = tangent.dot(force) * tangent / (fabs(tangent.dot(force)/force.length()));
+  }
+  */
   // r x F
   tf::Vector3 torque = arm.cross(projected_force);
   double torque_norm = torque.length();

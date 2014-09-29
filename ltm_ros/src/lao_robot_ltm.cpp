@@ -508,37 +508,29 @@ void LAORobotLTM::GetExecutionTraj(const vector<int>& all_state_ids, const vecto
   }
   //std::vector<double> move_times;
   //move_times.resize((*traj).poses.size(), 3.0);
-  //r_arm_->sendArmToPoses(*traj, current_angles, move_times);
+
+  geometry_msgs::PoseArray new_traj;
+  new_traj.header = traj->header;
+  new_traj.poses.assign(traj->poses.begin()+1,traj->poses.end());  
+  r_arm_->sendArmToPoses(new_traj, current_angles);
+
   // Skip the first waypoint
-  for (int ii = 1; ii < (*traj).poses.size(); ++ii)
+  //Pose by pose
+  /*
+     for (int ii = 1; ii < (*traj).poses.size(); ++ii)
+     {
+     r_arm_->getCurrentArmConfiguration(current_angles);
+     geometry_msgs::PoseStamped pose;
+     pose.header = (*traj).header;
+     pose.pose = (*traj).poses[ii];
+     r_arm_->closeGripper();
+  //if(!r_arm_->sendArmToPose(pose, current_angles, 1.0)) 
+  if(!r_arm_->sendArmToPose(pose, current_angles)) 
   {
-    r_arm_->getCurrentArmConfiguration(current_angles);
-    geometry_msgs::PoseStamped pose;
-    pose.header = (*traj).header;
-    pose.pose = (*traj).poses[ii];
-    r_arm_->closeGripper();
-    //if(!r_arm_->sendArmToPose(pose, current_angles, 1.0)) 
-    if(!r_arm_->sendArmToPose(pose, current_angles)) 
-    {
-      ROS_ERROR("Could not get IK");
-      /*
-      std::vector<double> r_init(7,0);
-      // Take guarded action
-      r_init[0] =-0.23117967578398957;
-      r_init[1] =1.0769730178922747;
-      r_init[2] =0.019446379058501773;
-      r_init[3] =-1.9621954289305932;
-      r_init[4] =-2.8490612115504246;
-      r_init[5] =-1.979940509361753;
-      r_init[6] =-3.1167221313806674;
-      r_arm_->openGripper();
-      sleep(2.0); // wait for gripper to open
-      r_arm_->sendArmToConfiguration(&r_init[0],3);
-      ii = ii - 1;
-      continue;
-      */
-    }
+  ROS_ERROR("Could not get IK");
   }
+  }
+  */
   ROS_INFO("Finished executing trajectory");
 
   // Store the fprims, so that we can compute observation probabilities later
