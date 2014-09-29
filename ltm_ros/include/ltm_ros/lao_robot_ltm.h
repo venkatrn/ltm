@@ -39,6 +39,7 @@ class LAORobotLTM
   public:
     LAORobotLTM();
     ~LAORobotLTM();
+    void ResetStateMachine();
 
 
   private:
@@ -64,6 +65,14 @@ class LAORobotLTM
     std::vector<double> model_offsets_x_, model_offsets_y_, model_offsets_z_;
     bool enforce_spatial_association_;
 
+    // State machine variables
+    bool full_trajectory_execution_;
+    int num_partial_traj_waypoints_;
+    bool replanning_;
+    bool grasped_;
+    std::vector<int> executed_fprims_;
+    std::vector<double> current_belief_;
+
     int grasp_idx_;
     std::vector<int> grasp_idxs_;
     geometry_msgs::Pose grasp_pose_;
@@ -71,15 +80,12 @@ class LAORobotLTM
     std::vector<int> grasp_attached_idxs_; //Indices of the points to which the grasp points are attached
     State_t start_state_, goal_state_;
     int num_goals_received_; // Keep track of number of goals received--must match number of grasp poses.
-    bool full_trajectory_execution_;
     // Store the last internal start state and the executed sequence of forces, so that we can compute observation probabilities
     State_t previous_start_state_;
-    std::vector<int> executed_fprims_;
-    std::vector<double> current_belief_;
 
 
     // Tracking points/ar markers
-    bool ar_marker_tracking_, record_observations_, record_bag_;
+    bool record_observations_, record_bag_;
     std::vector<geometry_msgs::PoseArray> observations_;
     geometry_msgs::PoseArray last_observed_pose_;
     // Store the last observed set of rectangles, output by the perception system
@@ -143,6 +149,10 @@ class LAORobotLTM
     // PR2 arm controllers
     Arm* r_arm_;
 
+    // Experiments
+    FILE* planner_stats_file_;
+    FILE* belief_stats_file_;
+    int experiment_num_;
 };
 #endif /* _LTM_ROS_LAO_ROBOT_LTM_H_ */
 

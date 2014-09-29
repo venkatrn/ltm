@@ -593,9 +593,9 @@ void DModelBank::GetNextState(int model_id, const geometry_msgs::PoseArray& in_p
   return;
 }
 
-void DModelBank::GetObservationProbabilities(const State_t& initial_state, const State_t& final_state, const vector<int> fprim_ids, vector<double>* obs_probs)
+void DModelBank::GetObservationProbabilities(const State_t& initial_state, const State_t& final_state, const vector<int>& fprim_ids, vector<double>* obs_probs)
 {
-  const double kObsVar = 0.01; // 20 cm // 1 cm
+  const double kObsVar = 0.05; // 20 cm // 1 cm
   // Note: obs_probs doesn't need to normalize
   vector<tf::Vector3> forces;
   vector<int> grasp_points;
@@ -605,6 +605,18 @@ void DModelBank::GetObservationProbabilities(const State_t& initial_state, const
   GetWorldPosesFromState(final_state, &final_poses);
   const int num_poses = int(final_poses.poses.size());
   //ROS_INFO("In poses: %d, Out poses: %d", initial_poses.poses.size(), final_poses.poses.size());
+  ROS_INFO("Initial pose: %f %f %f", 
+      initial_poses.poses[grasp_idxs_[0]].position.x,
+      initial_poses.poses[grasp_idxs_[0]].position.y,
+      initial_poses.poses[grasp_idxs_[0]].position.z);
+  /*
+  ROS_INFO("Executed forces");
+  for (int ii = 0; ii < fprim_ids.size(); ++ii)
+  {
+    tf::Vector3 force = forces[ii];
+    ROS_INFO("%f %f %f", force.x(), force.y(), force.z());
+  }
+  */
   geometry_msgs::PoseArray in_points;
   obs_probs->clear();
   obs_probs->resize(num_models_, 1.0);
@@ -615,12 +627,34 @@ void DModelBank::GetObservationProbabilities(const State_t& initial_state, const
     for (size_t jj = 0; jj < forces.size(); ++jj)
     {
       GetNextState(ii, in_points, grasp_points[jj], forces[jj], env_cfg_.sim_time_step, &out_points);
-      //ROS_INFO("In points: %d, Out points: %d", in_points.poses.size(), out_points.poses.size());
+      
+      // Compression
+      /*
+      State_t out_state;
+      out_state.grasp_idx = grasp_points[jj];
+      GetChangedStateFromWorldPoses(out_points, &out_state.changed_inds, &out_state.changed_points);
+      int state_id = StateToStateID(out_state);
+      out_state = StateIDToState(state_id);
+      GetWorldPosesFromState(out_state, &out_points);
+      */
+
       in_points = out_points;
     }
     for (int jj = 0; jj < num_poses; ++jj)
     {
       //ROS_INFO("There are %d points in out_poses", out_points.poses.size());
+      // TODO: for now, I am computing probability only on the end-effector pose
+      //if (jj != grasp_idxs_[0]) continue; 
+      if (jj == grasp_idxs_[0])
+      {
+        ROS_INFO("Model %d, Obs: %f %f %f, Expected: %f %f %f", ii, 
+            final_poses.poses[jj].position.x,
+            final_poses.poses[jj].position.y,
+            final_poses.poses[jj].position.z,
+            out_points.poses[jj].position.x,
+            out_points.poses[jj].position.y,
+            out_points.poses[jj].position.z);
+      }
       (*obs_probs)[ii] *= MultivariateNormalPDF(final_poses.poses[jj], out_points.poses[jj], kObsVar);
     }
   }
@@ -764,10 +798,10 @@ BeliefState_t DModelBank::BeliefStateIDToState(int belief_state_id)
   return empty_state;
 }
 
-int DModelBank::FPrimToFPrimID(int grasp_idx, int force_idx)
+int DModelBank::FPrimToFPrimID(int grasp_id, int force_idx)
 {
   const int num_grasp_idxs = grasp_idxs_.size();
-  return (force_idx * num_grasp_idxs) + grasp_idx;
+  return (force_idx * num_grasp_idxs) + grasp_id;
 }
 
 void DModelBank::FPrimIDToFPrim(int fprim_id, int* grasp_idx, int* force_idx)
@@ -810,7 +844,8 @@ void DModelBank::GetSuccs(int source_state_id,
       s.internal_state_id = succs[jj];
       s.belief.resize(num_models_, 0.0);
       // TODO: Incorporate noisy observation model
-      s.belief[ii] = 1;
+      //s.belief[ii] = 1.0/static_cast<double>(num_models_); //1.0
+      s.belief[ii] = 1.0;
       int belief_state_id = BeliefStateToStateID(s);
       int action_id = edge_ids[jj];
 
@@ -954,7 +989,17 @@ void DModelBank::GetSuccs(int model_id, int source_state_id, vector<int>* succs,
     int succ_id = StateToStateID(succ_state);
 
     succs->push_back(succ_id);
-    edge_ids->push_back(FPrimToFPrimID(source_state.grasp_idx, jj));
+    // Find the actual grasp id (index of the grasp index)
+    int grasp_id = -1;
+    for (size_t ii = 0; ii < grasp_idxs_.size(); ++ii)
+    {
+      if (source_state.grasp_idx == grasp_idxs_[ii])
+      {
+        grasp_id = ii;
+      }
+    }
+    assert(grasp_id != -1);
+    edge_ids->push_back(FPrimToFPrimID(grasp_id, jj));
     // TODO(venkat): Compute costs
     // costs->push_back(1);
     // costs->push_back(int(kCostMultiplier * Norm(force)));
@@ -977,7 +1022,7 @@ void DModelBank::GetSuccs(int model_id, int source_state_id, vector<int>* succs,
     succs->push_back(succ_id);
     // TODO: This is a hack where the last force primitive represents the all zeroes force
     // for switching grasp points
-    edge_ids->push_back(FPrimToFPrimID(succ_state.grasp_idx, force_primitives_.size() - 1));
+    edge_ids->push_back(FPrimToFPrimID(ii, force_primitives_.size() - 1));
     costs->push_back(int(1 * kCostMultiplier * env_cfg_.sim_time_step));
   }
   // Debug
@@ -1000,8 +1045,19 @@ bool DModelBank::IsGoalState(int belief_state_id)
 
 bool DModelBank::IsInternalGoalState(int state_id)
 {
+
   State_t s = StateIDToState(state_id);
   State_t goal_state = StateIDToState(env_cfg_.internal_goal_state_id);
+
+  //Experimental
+  /*
+  geometry_msgs::PoseArray state_poses;
+  GetWorldPosesFromState(s, &state_poses);
+  if (Dist(state_poses.poses[grasp_idxs_[0]].position, points_.poses[grasp_idxs_[0]].position)<1.5)
+    return false;
+  return true;
+  */
+  
 
   for (size_t ii = 0; ii < goal_state.changed_inds.size(); ++ii)
   {
@@ -1051,6 +1107,14 @@ double DModelBank::GetInternalGoalHeuristic(int internal_state_id)
 
   geometry_msgs::Pose current_grasp_pose;
   double grasp_point_dist = 0;
+
+
+  //Experimental
+  /*
+  geometry_msgs::PoseArray state_poses;
+  GetWorldPosesFromState(s, &state_poses);
+  return kCostMultiplier*max(0.0, 1.5 - Dist(state_poses.poses[grasp_idxs_[0]].position, points_.poses[grasp_idxs_[0]].position))/env_cfg_.sim_time_step;
+  */
 
   for (size_t ii = 0; ii < grasp_idxs_.size(); ++ii)
   {

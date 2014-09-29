@@ -11,6 +11,7 @@
 
   <depend package="ar_track_alvar_msgs"/>
   <depend package="kinematics_msgs"/>
+  <depend package="std_msgs"/>
   <depend package="ltm"/>
   <depend package="ltm_msgs"/>
   <depend package="pviz"/>

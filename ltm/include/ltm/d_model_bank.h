@@ -172,7 +172,7 @@ class DModelBank : public AbstractModelBank
     void SimulatePlan(int model_id, const std::vector<int>& fprim_ids); 
 
     /**@brief Get observation probabilities, given two internal states, and a sequence of fprims executed**/
-    void GetObservationProbabilities(const State_t& s_0, const State_t& s_1, const std::vector<int> fprim_ids, std::vector<double>* obs_probs);
+    void GetObservationProbabilities(const State_t& s_0, const State_t& s_1, const std::vector<int>& fprim_ids, std::vector<double>* obs_probs);
 
     /**@brief Visualize belief state**/
     void VisualizeState(int model_id, int belief_state_id);

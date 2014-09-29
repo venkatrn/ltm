@@ -25,9 +25,10 @@
     <param name="use_model_file" value="false"/>
     <!--<param name="fprims_file" value="$(find ltm)/matlab/fprims/circle_40.fprim"/>-->
     <param name="fprims_file" value="$(find ltm)/matlab/fprims/sphere_20.fprim"/>
-    <param name="sim_time_step" value="0.5"/> <!--0.2-->
+    <param name="sim_time_step" value="0.4"/> <!--0.2-->
     <param name="reference_frame" value="/base_link"/>
     <param name="full_trajectory_execution" value="false"/>
+    <param name="num_partial_traj_waypoints" value="4"/>
   </node>
 
   <node pkg="tf" type="static_transform_publisher" name="map_broadcaster" args="0 0 0 0 0 0 1 /base_link /map 1000" />

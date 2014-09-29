@@ -195,9 +195,11 @@ void LTMViz::VisualizeAxis(const tf::Vector3 axis, const tf::Vector3 axis_point)
 {
 
   const double kArrowLength = 1.0;
+  const double kArrowAdditional = 0.2; 
   // Visualize the axis
   geometry_msgs::Point start_point, end_point;
-  tf::Vector3 end = axis_point + kArrowLength*axis.normalized();
+  //tf::Vector3 end = axis_point + kArrowLength*axis.normalized();
+  tf::Vector3 end = axis_point + (axis.length() + kArrowAdditional)*axis.normalized();
   start_point.x = axis_point.x();
   start_point.y = axis_point.y();
   start_point.z = axis_point.z();

@@ -15,11 +15,30 @@
 
 #include <algorithm>
 
+#include <ros/package.h>
+
 using namespace std;
 
-LAORobotLTM::LAORobotLTM() : num_goals_received_(0),
-                             record_observations_(false),
-                             record_bag_(false)
+// Max joint velocity for PR2 arm
+const double kMaxJointVel = 0.5;
+// Home position for the right arm
+const vector<float> kRightArmHomeConfig = {0.564, 1.296, -0.042, -1.521, -3.273, -1.644, -40.441};
+/*
+kRightArmHomeConfig[0] = 0.564;
+kRightArmHomeConfig[1] = 1.296;
+kRightArmHomeConfig[2] = -0.042;
+kRightArmHomeConfig[3] = -1.521;
+kRightArmHomeConfig[4] = -3.273;
+kRightArmHomeConfig[5] = -1.644;
+kRightArmHomeConfig[6] = -40.441;
+*/
+string kPlannerStatsBase =  ros::package::getPath("ltm_ros") + "/stats/planner_stats";
+string kBeliefStatsBase =  ros::package::getPath("ltm_ros") + "/stats/belief_stats";
+
+LAORobotLTM::LAORobotLTM() : record_observations_(false),
+                             record_bag_(false),
+                             grasped_(false),
+                             experiment_num_(0)
 {
   ros::NodeHandle private_nh("~");
   private_nh.param("use_model_file", use_model_file_, false);
@@ -32,8 +51,10 @@ LAORobotLTM::LAORobotLTM() : num_goals_received_(0),
   private_nh.param("reference_frame", reference_frame_, string("/map"));
   private_nh.param("sim_time_step", sim_time_step_, 0.1);
   private_nh.param("full_trajectory_execution", full_trajectory_execution_, true);
+  private_nh.param("num_partial_traj_waypoints", num_partial_traj_waypoints_, 8);
 
-  grasp_idxs_.clear();
+  ResetStateMachine();
+  grasp_idxs_.clear(); //grasp_idxs are not part of state machine--they are stored for good once received, unless deliberately cleared by the user
 
   d_model_bank_ = new DModelBank(reference_frame_);
   planner_ = new LAOPlanner();
@@ -92,19 +113,33 @@ LAORobotLTM::~LAORobotLTM()
   if (r_arm_ != nullptr) delete r_arm_;
 }
 
+void LAORobotLTM::ResetStateMachine()
+{
+  num_goals_received_ = 0;
+  grasped_ = false;
+  observations_.clear();
+  full_trajectory_execution_ = false; //TODO: set to actual param
+  replanning_ = false;
+  executed_fprims_.clear();
+  current_belief_.clear();
+  if (num_models_ > 0) current_belief_.resize(num_models_, 1.0/static_cast<double>(num_models_));
+  last_observed_pose_.header.stamp = ros::Time::now() - ros::Duration(1000.0);
+  goal_state_.changed_inds.clear();
+  goal_state_.changed_points.poses.clear();
+  goal_state_.grasp_idx = -1;
+  previous_start_state_.changed_inds.clear();
+  previous_start_state_.changed_points.poses.clear();
+  previous_start_state_.grasp_idx = -1;
+  //local_grasp_poses_.clear();
+  //grasp_idxs_.clear();
+  
+}
+
 void LAORobotLTM::LearnCB(const std_msgs::Int32ConstPtr& learning_mode)
 {
-  // Learning modes: 0-Learning not yet started, 1-Learning in progress, 2-Learning is complete
-  if (learning_mode->data == 0)
-  {
-    //ar_marker_tracking_ = false;
-    return;
-  }
-
   if (learning_mode->data == 1)
   {
     // Trigger AR Marker tracking
-    //ar_marker_tracking_ = true;
     // Reset observations and edges
     observations_.clear();
     // Open the rosbag file for recording data
@@ -118,8 +153,8 @@ void LAORobotLTM::LearnCB(const std_msgs::Int32ConstPtr& learning_mode)
 
   if (learning_mode->data == 2)
   {
+    ROS_INFO("[LAO Robot LTM]: In learn CB");
     // Stop AR Marker tracking, and pass observations to d_model
-    //ar_marker_tracking_ = false;
     if (record_bag_)
     {
        bag_.close();
@@ -168,8 +203,11 @@ void LAORobotLTM::LearnCB(const std_msgs::Int32ConstPtr& learning_mode)
     learner_->PlanesToKinematicModels(rectangles_, &kinematic_models);
     learner_->GenerateModelsMinCut(d_model_bank_->GetDModelPoints(), edges, kinematic_models, &edge_params);
     num_models_ = edge_params.size();
+
+
     current_belief_.clear();
     current_belief_.resize(num_models_, 1.0/static_cast<double>(num_models_));
+
     d_model_bank_->InitFromObs(edges, edge_params); 
     ROS_INFO("LTM Node: Initialized model from live observation\n");
     return;
@@ -201,8 +239,16 @@ void LAORobotLTM::GraspCB(const geometry_msgs::PoseStampedConstPtr& grasp_pose)
 
 void LAORobotLTM::GoalCB(const geometry_msgs::PoseStampedConstPtr& goal_pose)
 {
-  ROS_INFO("LTM Node: Received goal %d", num_goals_received_);
+  // Experiments
+  if (experiment_num_ != 0) fclose(planner_stats_file_);
+  if (experiment_num_ != 0) fclose(belief_stats_file_);
+  experiment_num_++;
+  string planner_stats_name = kPlannerStatsBase + boost::lexical_cast<string>(experiment_num_) + ".csv";
+  string belief_stats_name = kBeliefStatsBase + boost::lexical_cast<string>(experiment_num_) + ".csv";
+  planner_stats_file_ = fopen(planner_stats_name.c_str(), "w");
+  belief_stats_file_ = fopen(belief_stats_name.c_str(), "w");
 
+  ROS_INFO("LTM Node: Received goal %d", num_goals_received_);
   // Transform goal pose to reference frame
   geometry_msgs::PoseStamped goal_pose_ref_frame;
   tf_listener_.waitForTransform(goal_pose->header.frame_id, reference_frame_, ros::Time::now(), ros::Duration(3.0));
@@ -253,6 +299,7 @@ void LAORobotLTM::PlanAndExecute()
   PlannerStats planner_stats = planner_->GetPlannerStats();
   ROS_INFO("Planner Stats:\nNum Expansions: %d, Planning Time: %f, Start State Value: %d\n",
       planner_stats.expansions, planner_stats.time, planner_stats.cost);
+  fprintf(planner_stats_file_, "%d %f %d\n", planner_stats.expansions, planner_stats.time, planner_stats.cost);
 
   // Convert state ids to end-effector trajectory
   geometry_msgs::PoseArray traj;
@@ -272,12 +319,26 @@ void LAORobotLTM::UpdateStartState()
   start_state_.grasp_idx = grasp_idxs_[0];
   assert(observations_.size() != 0);
 
-  geometry_msgs::PoseArray appended_poses;
-  ObservationsToModelPoses(last_observed_pose_, &appended_poses);
-  d_model_bank_->GetChangedStateFromWorldPoses(appended_poses, &start_state_.changed_inds, &start_state_.changed_points);
-  //ROS_INFO("[LAO Robot LTM]: %d points have changed in the start state", start_state_.changed_inds.size());
-  geometry_msgs::Pose p = appended_poses.poses[grasp_idxs_[0]];
-  ROS_WARN("[LAO Robot LTM]: New start pose: %f %f %f", p.position.x, p.position.y, p.position.z);
+  // Update the end-effector location if replanning, else set start to original start
+  if (replanning_)
+  {
+    geometry_msgs::PoseArray appended_poses;
+    ObservationsToModelPoses(last_observed_pose_, &appended_poses);
+    d_model_bank_->GetChangedStateFromWorldPoses(appended_poses, &start_state_.changed_inds, &start_state_.changed_points);
+    //ROS_INFO("[LAO Robot LTM]: %d points have changed in the start state", start_state_.changed_inds.size());
+    geometry_msgs::Pose p = appended_poses.poses[grasp_idxs_[0]];
+    ROS_WARN("[LAO Robot LTM]: New start pose: %f %f %f", p.position.x, p.position.y, p.position.z);
+    geometry_msgs::PoseStamped end_eff_pose;
+    r_arm_->getCurrentEndEffectorPose(end_eff_pose, reference_frame_);
+    ROS_WARN("[LAO Robot LTM]: End-eff pose: %f %f %f", end_eff_pose.pose.position.x, end_eff_pose.pose.position.y, end_eff_pose.pose.position.z);
+  }
+  else
+  {
+    start_state_.changed_inds.clear();
+    start_state_.changed_points.poses.clear();
+  }
+
+
   d_model_bank_->SetInternalStartState(start_state_);
 
   BeliefState_t start_belief_state;
@@ -293,12 +354,15 @@ void LAORobotLTM::UpdateStartState()
   }
   string s = ss.str();
   ROS_WARN("New start state belief: %s", s.c_str());
+  fprintf(belief_stats_file_, "%s\n", s.c_str());
+
   //TODO: remove this
-  start_belief_state.belief.clear();
-  start_belief_state.belief.resize(num_models_, 1.0/static_cast<double>(num_models_));
+  //start_belief_state.belief.clear();
+  //start_belief_state.belief.resize(num_models_, 1.0/static_cast<double>(num_models_));
 
   d_model_bank_->SetStartState(start_belief_state);
   previous_start_state_ = start_state_;
+  current_belief_ = start_belief_state.belief;
   return;
 }
 
@@ -309,12 +373,11 @@ void LAORobotLTM::GetStartBelief(vector<double>* belief)
   //ROS_INFO("Number of executed fprims: %d", executed_fprims_.size());
   //ROS_INFO("[LAO Robot LTM]: %d changed points in the start state", start_state_.changed_inds.size());
   //ROS_INFO("[LAO Robot LTM]: %d changed points in the prev start state", previous_start_state_.changed_inds.size());
-  bool start_state_unchanged = (previous_start_state_ == start_state_);
-  if (start_state_unchanged)
-  {
-    ROS_INFO("Start state is unchanged");
-  }
-  if (executed_fprims_.size() == 0 || start_state_unchanged)
+
+  // Execute open-loop plan with current belief if we haven't seen the markers recently
+  ros::Duration duration = ros::Time::now() - last_observed_pose_.header.stamp;
+  const bool marker_recently_observed = (duration < ros::Duration(2.0));
+  if (executed_fprims_.size() == 0 || !marker_recently_observed)
   {
     *belief = current_belief_;
     // If the start state did not change, I am assuming that we dint see the AR markers.
@@ -368,7 +431,7 @@ void LAORobotLTM::GetExecutionTraj(const vector<int>& all_state_ids, const vecto
   }
   else 
   {
-    num_points = 4;
+    num_points = num_partial_traj_waypoints_;
   }
   vector<int> state_ids, fprim_ids;
   assert(all_state_ids.size() == all_fprim_ids.size() + 1);
@@ -398,13 +461,12 @@ void LAORobotLTM::GetExecutionTraj(const vector<int>& all_state_ids, const vecto
   d_model_bank_->ConvertForcePrimIDsToForcePrims(fprim_ids, &forces, &grasp_points);
 
   /*
-     printf("Force Sequence:\n");
-     for (size_t ii = 0; ii < forces.size(); ++ii)
-     {
-     printf("%f %f %f\n", forces[ii].x(), forces[ii].y(), forces[ii].z());
-     }
-     printf("\n");
-     */
+  ROS_INFO("Force Sequence:");
+  for (size_t ii = 0; ii < forces.size(); ++ii)
+  {
+    ROS_INFO("%f %f %f", forces[ii].x(), forces[ii].y(), forces[ii].z());
+  }
+  */
 
   d_model_bank_->GetEndEffectorTrajFromStateIDs(state_ids, traj);
 
@@ -438,8 +500,10 @@ void LAORobotLTM::GetExecutionTraj(const vector<int>& all_state_ids, const vecto
     first_pose.pose = (*traj).poses[0];
     r_arm_->openGripper();
     sleep(2.0); // wait for gripper to open
-    r_arm_->sendArmToPose(first_pose, current_angles, 4.0); //4.0
+    //r_arm_->sendArmToPose(first_pose, current_angles, 4.0); 
+    r_arm_->sendArmToPose(first_pose, current_angles);
     r_arm_->closeGripper();
+    grasped_ = true;
     sleep(2.0); // wait for gripper to close
   }
   //std::vector<double> move_times;
@@ -453,8 +517,11 @@ void LAORobotLTM::GetExecutionTraj(const vector<int>& all_state_ids, const vecto
     pose.header = (*traj).header;
     pose.pose = (*traj).poses[ii];
     r_arm_->closeGripper();
-    if(!r_arm_->sendArmToPose(pose, current_angles, 1.0)) //TODO: compute this using joint velocity limits //2.0
+    //if(!r_arm_->sendArmToPose(pose, current_angles, 1.0)) 
+    if(!r_arm_->sendArmToPose(pose, current_angles)) 
     {
+      ROS_ERROR("Could not get IK");
+      /*
       std::vector<double> r_init(7,0);
       // Take guarded action
       r_init[0] =-0.23117967578398957;
@@ -469,6 +536,7 @@ void LAORobotLTM::GetExecutionTraj(const vector<int>& all_state_ids, const vecto
       r_arm_->sendArmToConfiguration(&r_init[0],3);
       ii = ii - 1;
       continue;
+      */
     }
   }
   ROS_INFO("Finished executing trajectory");
@@ -491,20 +559,19 @@ void LAORobotLTM::TrajExecCB(const std_msgs::Int32ConstPtr& exec_mode_ptr)
   if (full_trajectory_execution_ || d_model_bank_->IsInternalGoalState(temp_goal_state)) 
   {
     // Success--reset goal state to be ready for next goal request
-    ROS_INFO("[LTM Node]: Task completed successfully, ready for new goal request");
-    num_goals_received_ = 0;
-    goal_state_.changed_inds.clear();
-    goal_state_.changed_points.poses.clear();
     r_arm_->openGripper();
+    sleep(2.0); // wait for gripper to open
+    r_arm_->backupGripper(0.2);
+    r_arm_->sendArmToConfiguration(kRightArmHomeConfig, 3.0);
+    ResetStateMachine();
+    ROS_INFO("[LTM Node]: Task completed successfully, ready for new goal request");
   }
   else
   {
     // Replan and execute
+    replanning_ = true;
     ROS_INFO("[LTM Node]: Partial trajectory executed, replanning to goal");
     UpdateStartState();
-
-    //Assuming that the goal does not change midway through execution
-    //d_model_bank_->SetInternalGoalState(goal_state_);
     PlanAndExecute();
   }
   return;
@@ -536,14 +603,6 @@ void LAORobotLTM::KinectCB(const sensor_msgs::PointCloud2& point_cloud)
 
 void LAORobotLTM::ARMarkersCB(const ar_track_alvar_msgs::AlvarMarkersConstPtr& ar_markers)
 {
-  // Do not store poses if not in learning mode
-  /*
-  if (!ar_marker_tracking_)
-  {
-    return;
-  }
-  */
-  
   // Ensure we have same number of markers in each frame
   const int num_markers = int(ar_markers->markers.size());
 
@@ -614,9 +673,9 @@ void LAORobotLTM::ARMarkersCB(const ar_track_alvar_msgs::AlvarMarkersConstPtr& a
       vector<int> idxs;
       vector<float> sqr_distances;
       pcl::PointXYZ search_point;
-      search_point.x = observations_.back().poses[ii].position.x;
-      search_point.y = observations_.back().poses[ii].position.y;
-      search_point.z = observations_.back().poses[ii].position.z;
+      search_point.x = last_observed_pose_.poses[ii].position.x;
+      search_point.y = last_observed_pose_.poses[ii].position.y;
+      search_point.z = last_observed_pose_.poses[ii].position.z;
       kdtree.nearestKSearch(search_point, kKNNSearchK, idxs, sqr_distances);
       pose_array.poses[ii] = temp_pose_array.poses[idxs[0]];
     }
@@ -637,17 +696,8 @@ void LAORobotLTM::ARMarkersCB(const ar_track_alvar_msgs::AlvarMarkersConstPtr& a
     observations_.push_back(pose_array);
   }
   last_observed_pose_ = pose_array;
-  /*
-  if (grasp_idxs_.size() != 0)
-  {
-    geometry_msgs::PoseArray appended_poses;
-    ObservationsToModelPoses(last_observed_pose_, &appended_poses);
-    geometry_msgs::Pose grasp_pose = appended_poses.poses[grasp_idxs_[0]];
-    geometry_msgs::Pose zero_pose = appended_poses.poses[0];
-    ROS_INFO("Latest 0 pose: %f %f %f", zero_pose.position.x, zero_pose.position.y, zero_pose.position.z);
-    ROS_INFO("Latest grasp pose: %f %f %f", grasp_pose.position.x, grasp_pose.position.y, grasp_pose.position.z);
-  }
-  */
+  last_observed_pose_.header.frame_id = reference_frame_;
+  last_observed_pose_.header.stamp = ros::Time::now();
 
   return;
 }
@@ -851,22 +901,33 @@ bool LAORobotLTM::GetRightIK(const vector<double>& ik_pose, const vector<double>
 
 void LAORobotLTM::ObservationsToModelPoses(const geometry_msgs::PoseArray& observations, geometry_msgs::PoseArray* appended_poses)
 {
+  appended_poses->poses = observations.poses;
   // Must append the grasp poses to AR marker poses--need the TF's for the changed points first
   //TODO: smarter way to do this
-  tf::Transform transform;
-  for (size_t ii = 0; ii < last_observed_pose_.poses.size(); ++ii)
+  if (!grasped_)
   {
-    static tf::TransformBroadcaster tf_br_;
-    geometry_msgs::Pose p = last_observed_pose_.poses[ii];
-    transform.setOrigin(tf::Vector3(p.position.x, p.position.y, p.position.z) );
-    transform.setRotation(tf::Quaternion(p.orientation.x, p.orientation.y, p.orientation.z, p.orientation.w));
-    string child_frame_id = boost::lexical_cast<string>(ii); //assuming the idxs are same until the grasp idxx
-    tf_br_.sendTransform(tf::StampedTransform(transform, ros::Time::now(), reference_frame_.c_str(), child_frame_id.c_str()));
+    tf::Transform transform;
+    for (size_t ii = 0; ii < last_observed_pose_.poses.size(); ++ii)
+    {
+      static tf::TransformBroadcaster tf_br_;
+      geometry_msgs::Pose p = last_observed_pose_.poses[ii];
+      transform.setOrigin(tf::Vector3(p.position.x, p.position.y, p.position.z) );
+      transform.setRotation(tf::Quaternion(p.orientation.x, p.orientation.y, p.orientation.z, p.orientation.w));
+      string child_frame_id = boost::lexical_cast<string>(ii); //assuming the idxs are same until the grasp idxx
+      tf_br_.sendTransform(tf::StampedTransform(transform, ros::Time::now(), reference_frame_.c_str(), child_frame_id.c_str()));
+    }
+    for (int ii = 0; ii < local_grasp_poses_.size(); ++ii)
+    { 
+      string local_frame = boost::lexical_cast<string>(grasp_attached_idxs_[ii]); //assuming the idxs are same until the grasp idxx
+      appended_poses->poses.push_back(d_model_bank_->TransformPose(local_grasp_poses_[ii], local_frame, reference_frame_));
+    }
   }
-  appended_poses->poses = observations.poses;
-  for (int ii = 0; ii < local_grasp_poses_.size(); ++ii)
-  { 
-    string local_frame = boost::lexical_cast<string>(grasp_attached_idxs_[ii]); //assuming the idxs are same until the grasp idxx
-    appended_poses->poses.push_back(d_model_bank_->TransformPose(local_grasp_poses_[ii], local_frame, reference_frame_));
+  else
+  {
+    // TODO: I am assuming there is only one grasp point for now and updating it live
+    geometry_msgs::PoseStamped end_eff_pose;
+    r_arm_->getCurrentEndEffectorPose(end_eff_pose, reference_frame_);
+    appended_poses->poses.push_back(end_eff_pose.pose);
   }
+
 }

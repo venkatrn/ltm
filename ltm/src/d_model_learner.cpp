@@ -485,16 +485,18 @@ void DModelLearner::PlanesToKinematicModels(const ltm_msgs::PolygonArrayStamped 
     vector<tf::Vector3> axes;
     axes.push_back(points[1] - points[0]);
     axes.push_back(points[2] - points[1]);
+    axes.push_back(points[3] - points[2]);
+    axes.push_back(points[0] - points[3]);
     // 4 revolute models (one for each side of the rectangle) + 1 prismatic model (normal to the rectangle)
     for (int jj = 0; jj < 4; ++jj)
     {
       //TODO: Debugging
       //if (fabs(axes[jj%2].normalized().z() < 0.9)) continue;
       //axes[jj%2] = tf::Vector3(0.0, 0.0, 1.0);
-      RevoluteModel* revolute_model = new RevoluteModel(reference_frame_, axes[jj%2], points[jj]);
+      RevoluteModel* revolute_model = new RevoluteModel(reference_frame_, axes[jj], points[jj]);
       learnt_models_.push_back(revolute_model);
       kinematic_models->push_back(revolute_model);
-      viz_->VisualizeAxis(axes[jj%2], points[jj]);
+      viz_->VisualizeAxis(axes[jj], points[jj]);
     }
     tf::Vector3 normal = axes[1].cross(axes[0]);
     normal.normalize();
