@@ -24,6 +24,11 @@ const double kMaxJointVel = 0.5;
 // Home position for the right arm
 const vector<float> kRightArmHomeConfig = {0.564, 1.296, -0.042, -1.521, -3.273, -1.644, -40.441};
 const bool run_experiments_ = false;
+//const vector<float> kRightArmHomeConfig = {0.564, 1.296, -0.042, -1.521, -3.273, -1.644, -40.441};
+//const vector<float> kRightArmHomeConfig = {0.260, -0.339, 0.301, -1.141, 2.966, -1.559, -9.704};//kitchen-top cabinet
+
+
+
 /*
 kRightArmHomeConfig[0] = 0.564;
 kRightArmHomeConfig[1] = 1.296;

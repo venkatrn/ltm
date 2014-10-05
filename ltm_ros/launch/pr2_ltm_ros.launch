@@ -28,7 +28,14 @@
     <param name="sim_time_step" value="0.4"/> <!--0.2-->
     <param name="reference_frame" value="/base_link"/>
     <param name="full_trajectory_execution" value="false"/>
-    <param name="num_partial_traj_waypoints" value="4"/>
+    <param name="num_partial_traj_waypoints" value="3"/>
+  </node>
+
+  <!--The trajectory filter-->
+
+  <node pkg="trajectory_filter_server" name="arm_trajectory_filter" type="trajectory_filter_server" output="screen"> 
+    <rosparam command="load" file="$(find ltm_ros)/config/simple_filters.yaml"/>
+    <rosparam command="load" file="$(find pr2_arm_navigation_config)/config/joint_limits_right_left.yaml"/>
   </node>
 
   <node pkg="tf" type="static_transform_publisher" name="map_broadcaster" args="0 0 0 0 0 0 1 /base_link /map 1000" />

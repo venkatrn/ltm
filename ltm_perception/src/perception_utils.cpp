@@ -115,7 +115,7 @@ void perception_utils::OrganizedSegmentation(PointCloudPtr cloud, std::vector<pc
   pcl::OrganizedMultiPlaneSegmentation<PointT, pcl::Normal, pcl::Label> mps;
   // Set up Organized Multi Plane Segmentation 
   mps.setComparator (euclidean_comparator);
-  mps.setMinInliers (1000);
+  mps.setMinInliers (500); //1000
   mps.setAngularThreshold (pcl::deg2rad (3.0)); //3 degrees             
   mps.setDistanceThreshold (0.02); //2cm  
   mps.setProjectPoints(true);

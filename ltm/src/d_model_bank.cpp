@@ -22,7 +22,7 @@
 const double kCostMultiplier = 1e3;
 // Error tolerance for comparing goal point locations.
 const double kGoalTolerance = 0.2; //0.05, 0.01 for experiments //0.25
-const double kGoalEndEffDisp = 0.6;
+const double kGoalEndEffDisp = 0.4;
 const bool kNoGoal = true;
 
 using namespace std;
