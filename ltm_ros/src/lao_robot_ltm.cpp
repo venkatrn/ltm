@@ -22,7 +22,12 @@ using namespace std;
 // Max joint velocity for PR2 arm
 const double kMaxJointVel = 0.5;
 // Home position for the right arm
-const vector<float> kRightArmHomeConfig = {0.564, 1.296, -0.042, -1.521, -3.273, -1.644, -40.441};
+//const vector<float> kRightArmHomeConfig = {0.564, 1.296, -0.042, -1.521, -3.273, -1.644, -40.441};
+const vector<float> kRightArmHomeConfig = {0.564, 0.860, 0.210, -2.119, -123.065, -1.624, -369.14};//drawer
+//const vector<float> kRightArmHomeConfig = {0.260, -0.339, 0.301, -1.141, 2.966, -1.559, -9.704};//kitchen-top cabinet
+
+
+
 /*
 kRightArmHomeConfig[0] = 0.564;
 kRightArmHomeConfig[1] = 1.296;
