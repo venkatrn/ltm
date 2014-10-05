@@ -23,6 +23,7 @@ using namespace std;
 const double kMaxJointVel = 0.5;
 // Home position for the right arm
 const vector<float> kRightArmHomeConfig = {0.564, 1.296, -0.042, -1.521, -3.273, -1.644, -40.441};
+const bool run_experiments_ = false;
 /*
 kRightArmHomeConfig[0] = 0.564;
 kRightArmHomeConfig[1] = 1.296;
@@ -123,7 +124,7 @@ void LAORobotLTM::ResetStateMachine()
   executed_fprims_.clear();
   current_belief_.clear();
   if (num_models_ > 0) current_belief_.resize(num_models_, 1.0/static_cast<double>(num_models_));
-  last_observed_pose_.header.stamp = ros::Time::now() - ros::Duration(1000.0);
+  //last_observed_pose_.header.stamp = ros::Time::now() - ros::Duration(1000.0);
   goal_state_.changed_inds.clear();
   goal_state_.changed_points.poses.clear();
   goal_state_.grasp_idx = -1;
@@ -240,13 +241,16 @@ void LAORobotLTM::GraspCB(const geometry_msgs::PoseStampedConstPtr& grasp_pose)
 void LAORobotLTM::GoalCB(const geometry_msgs::PoseStampedConstPtr& goal_pose)
 {
   // Experiments
-  if (experiment_num_ != 0) fclose(planner_stats_file_);
-  if (experiment_num_ != 0) fclose(belief_stats_file_);
-  experiment_num_++;
-  string planner_stats_name = kPlannerStatsBase + boost::lexical_cast<string>(experiment_num_) + ".csv";
-  string belief_stats_name = kBeliefStatsBase + boost::lexical_cast<string>(experiment_num_) + ".csv";
-  planner_stats_file_ = fopen(planner_stats_name.c_str(), "w");
-  belief_stats_file_ = fopen(belief_stats_name.c_str(), "w");
+  if (run_experiments_)
+  {
+    if (experiment_num_ != 0) fclose(planner_stats_file_);
+    if (experiment_num_ != 0) fclose(belief_stats_file_);
+    experiment_num_++;
+    string planner_stats_name = kPlannerStatsBase + boost::lexical_cast<string>(experiment_num_) + ".csv";
+    string belief_stats_name = kBeliefStatsBase + boost::lexical_cast<string>(experiment_num_) + ".csv";
+    planner_stats_file_ = fopen(planner_stats_name.c_str(), "w");
+    belief_stats_file_ = fopen(belief_stats_name.c_str(), "w");
+  }
 
   ROS_INFO("LTM Node: Received goal %d", num_goals_received_);
   // Transform goal pose to reference frame
@@ -299,7 +303,10 @@ void LAORobotLTM::PlanAndExecute()
   PlannerStats planner_stats = planner_->GetPlannerStats();
   ROS_INFO("Planner Stats:\nNum Expansions: %d, Planning Time: %f, Start State Value: %d\n",
       planner_stats.expansions, planner_stats.time, planner_stats.cost);
-  fprintf(planner_stats_file_, "%d %f %d\n", planner_stats.expansions, planner_stats.time, planner_stats.cost);
+  if (run_experiments_)
+  {
+    fprintf(planner_stats_file_, "%d %f %d\n", planner_stats.expansions, planner_stats.time, planner_stats.cost);
+  }
 
   // Convert state ids to end-effector trajectory
   geometry_msgs::PoseArray traj;
@@ -317,7 +324,7 @@ void LAORobotLTM::UpdateStartState()
     return;
   }
   start_state_.grasp_idx = grasp_idxs_[0];
-  assert(observations_.size() != 0);
+  //assert(observations_.size() != 0);
 
   // Update the end-effector location if replanning, else set start to original start
   if (replanning_)
@@ -354,7 +361,10 @@ void LAORobotLTM::UpdateStartState()
   }
   string s = ss.str();
   ROS_WARN("New start state belief: %s", s.c_str());
-  fprintf(belief_stats_file_, "%s\n", s.c_str());
+  if (run_experiments_)
+  {
+    fprintf(belief_stats_file_, "%s\n", s.c_str());
+  }
 
   //TODO: remove this
   //start_belief_state.belief.clear();

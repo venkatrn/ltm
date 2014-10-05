@@ -53,9 +53,9 @@ const double kMinWidth = 0.2;
 const double kMaxWidth = 5;
 // The following are PR2-specific, and assumes that reference frame is base_link
 const double kMinX = 0.1;
-const double kMaxX = 2.0;
-const double kMinY = -0.75;
-const double kMaxY = 0.75;
+const double kMaxX = 1.0;
+const double kMinY = -0.5;
+const double kMaxY = 0.5;
 const double kMinZ = 0.1;
 const double kMaxZ = 2.0;
 

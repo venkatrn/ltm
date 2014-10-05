@@ -484,6 +484,38 @@ void DModelBank::GetNextState(int model_id, const geometry_msgs::PoseArray& in_p
   *out_points = in_points;
   vector<int> component_idxs, sep_idxs;
   JointType joint_type;
+  
+  const int switch_idx_ = 2;
+  const int switch_model_ = 0;
+  geometry_msgs::Pose default_switch_pose_;
+  default_switch_pose_.position.x =  0.5;
+  default_switch_pose_.position.y =  -0.5;
+  default_switch_pose_.position.z =  0.5;
+
+  pair<int,int> switch_edge(0,1);
+  EdgeParams switch_new_e_params, switch_default_e_params;
+  switch_new_e_params.joint = REVOLUTE;
+  switch_new_e_params.normal = tf::Vector3(0,0,1);
+  switch_new_e_params.center = tf::Vector3(0.5,0.5,0);
+  switch_default_e_params.joint = RIGID;
+  switch_default_e_params.normal = tf::Vector3(0,0,0);
+  switch_default_e_params.center = tf::Vector3(0,0,0);
+
+  geometry_msgs::Pose p_switch = in_points.poses[switch_idx_];
+  if (model_id == switch_model_)
+  {
+    EdgeMap* edge_map = edge_maps_[model_id];
+    if(!PosesEqual(p_switch, default_switch_pose_))
+    {
+      edge_map->at(switch_edge) = switch_default_e_params;
+    }
+    else
+    {
+      ROS_INFO("Switching edge params");
+      edge_map->at(switch_edge) = switch_new_e_params;
+    }
+  }
+
   tf::Vector3 normal, center;
   ExtractIndices(model_id, p_idx, &component_idxs, &sep_idxs, &joint_type, &normal, &center);
 
