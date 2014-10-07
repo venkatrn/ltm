@@ -1,0 +1,15 @@
+<package>
+  <description brief="handle_detector">
+
+     handle_detector
+
+  </description>
+  <author>Andreas ten Pas</author>
+  <license>BSD</license>
+  <review status="unreviewed" notes=""/>
+  <url>http://wiki.ros.org/handle_detector</url>
+  <depend package="geometry_msgs"/>
+
+</package>
+
+
