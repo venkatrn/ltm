@@ -21,16 +21,17 @@
       <rosparam param="model_files" subst_value="True">
         <!--[$(find ltm)/matlab/models/door.mdl]-->
         <!--[$(find ltm)/matlab/models/ball_joint.mdl]-->
-        [$(find ltm)/matlab/models/complex_door.mdl]
+        [$(find ltm)/matlab/models/complex_door.mdl,
+         $(find ltm)/matlab/models/complex_door.mdl]
       </rosparam>
       <rosparam param="model_offsets_x">
-        [0.0]
+        [0.0,0.0]
       </rosparam>
       <rosparam param="model_offsets_y">
-        [0.0]
+        [0.0,0.0]
       </rosparam>
       <rosparam param="model_offsets_z">
-        [0.0]
+        [0.0,0.0]
       </rosparam>
 <!--
       <rosparam param="model_files" subst_value="True">
@@ -61,8 +62,10 @@
     <param name="fprims_file" value="$(find ltm)/matlab/fprims/circle_40.fprim"/>
     -->
 
-    <param name="sim_time_step" value="0.2"/> <!--1.0-->
+    <param name="sim_time_step" value="0.6"/> <!--0.2-->
+    <param name="simulation" value="true"/> 
     <param name="reference_frame" value="/base_link"/>
+    <param name="full_trajectory_execution" value="true"/>
   </node>
 
   <node pkg="tf" type="static_transform_publisher" name="map_broadcaster" args="0 0 0 0 0 0 1 /base_link /map 1000" />

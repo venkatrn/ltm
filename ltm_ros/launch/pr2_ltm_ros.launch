@@ -25,10 +25,11 @@
     <param name="use_model_file" value="false"/>
     <!--<param name="fprims_file" value="$(find ltm)/matlab/fprims/circle_40.fprim"/>-->
     <param name="fprims_file" value="$(find ltm)/matlab/fprims/sphere_20.fprim"/>
-    <param name="sim_time_step" value="0.4"/> <!--0.2-->
+    <param name="sim_time_step" value="0.4"/> <!--0.4-->
     <param name="reference_frame" value="/base_link"/>
-    <param name="full_trajectory_execution" value="false"/>
+    <param name="full_trajectory_execution" value="true"/>
     <param name="num_partial_traj_waypoints" value="3"/>
+    <param name="simulation" value="true"/>
   </node>
 
   <!--The trajectory filter-->

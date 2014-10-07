@@ -22,7 +22,7 @@
 const double kCostMultiplier = 1e3;
 // Error tolerance for comparing goal point locations.
 const double kGoalTolerance = 0.2; //0.05, 0.01 for experiments //0.25
-const double kGoalEndEffDisp = 0.4;
+const double kGoalEndEffDisp = 1.0; //0.4
 const bool kNoGoal = true;
 
 using namespace std;
@@ -485,7 +485,7 @@ void DModelBank::GetNextState(int model_id, const geometry_msgs::PoseArray& in_p
   vector<int> component_idxs, sep_idxs;
   JointType joint_type;
   
-  const int switch_idx_ = 2;
+  const int switch_idx_ = 0;
   const int switch_model_ = 0;
   geometry_msgs::Pose default_switch_pose_;
   default_switch_pose_.position.x =  0.5;
@@ -493,26 +493,35 @@ void DModelBank::GetNextState(int model_id, const geometry_msgs::PoseArray& in_p
   default_switch_pose_.position.z =  0.5;
 
   pair<int,int> switch_edge(0,1);
-  EdgeParams switch_new_e_params, switch_default_e_params;
-  switch_new_e_params.joint = REVOLUTE;
-  switch_new_e_params.normal = tf::Vector3(0,0,1);
-  switch_new_e_params.center = tf::Vector3(0.5,0.5,0);
-  switch_default_e_params.joint = RIGID;
-  switch_default_e_params.normal = tf::Vector3(0,0,0);
-  switch_default_e_params.center = tf::Vector3(0,0,0);
+  EdgeParams switch_new_e_params, switch_default_e_params, door_params;
+  //door_params.joint = REVOLUTE;
+  //door_params.normal = tf::Vector3(0,0,1);
+  //door_params.center = tf::Vector3(1.0,0.5,1.0);
+  //edge_maps_[model_id]->at(make_pair(0,1)) = door_params;
+
+  switch_default_e_params.joint = REVOLUTE;
+  switch_default_e_params.normal = tf::Vector3(1,0,0);
+  switch_default_e_params.center = tf::Vector3(0.8,-0.5,0.5); //y is -0.5
+  switch_new_e_params.joint = RIGID;
+  switch_new_e_params.normal = tf::Vector3(0,0,0);
+  switch_new_e_params.center = tf::Vector3(0,0,0);
 
   geometry_msgs::Pose p_switch = in_points.poses[switch_idx_];
-  if (model_id == switch_model_)
+  //if (model_id == switch_model_)
+  if (model_id != -1)
   {
     EdgeMap* edge_map = edge_maps_[model_id];
-    if(!PosesEqual(p_switch, default_switch_pose_))
-    {
-      edge_map->at(switch_edge) = switch_default_e_params;
-    }
-    else
+    //if(PosesEqual(p_switch, default_switch_pose_))
+    if(p_switch.position.z < points_.poses[switch_idx_].position.z - 0.1)
     {
       ROS_INFO("Switching edge params");
       edge_map->at(switch_edge) = switch_new_e_params;
+      Edge rev_edge = make_pair(switch_edge.second, switch_edge.first);
+      edge_map->at(rev_edge) = switch_new_e_params;
+    }
+    else
+    {
+      //edge_map->at(switch_edge) = switch_default_e_params;
     }
   }
 
@@ -537,7 +546,7 @@ void DModelBank::GetNextState(int model_id, const geometry_msgs::PoseArray& in_p
      printf("%d ", sep_idxs[ii]);
      }
      printf("\n");
-  */
+     */
 
   int closest_p_idx = -1;
   if (sep_idxs.size() != 0) 
@@ -989,6 +998,26 @@ void DModelBank::GetSuccs(int model_id, int source_state_id, vector<int>* succs,
     geometry_msgs::PoseArray out_points;
     tf::Vector3 force = force_primitives_[jj];
     GetNextState(model_id, in_points, source_state.grasp_idx, force, env_cfg_.sim_time_step, &out_points);
+    if (!IsValidPoses(model_id, out_points))
+    {
+      continue;
+      //TODO: This needs to be thought over. Should there be a valid successor that is the same as the input, or no successor at all?
+      //out_points = in_points;
+      succs->push_back(source_state_id);
+      int grasp_id = -1;
+      for (size_t ii = 0; ii < grasp_idxs_.size(); ++ii)
+      {
+        if (source_state.grasp_idx == grasp_idxs_[ii])
+        {
+          grasp_id = ii;
+        }
+      }
+      assert(grasp_id != -1);
+      edge_ids->push_back(FPrimToFPrimID(grasp_id, jj));
+      costs->push_back(int(1 * kCostMultiplier * env_cfg_.sim_time_step));
+      continue;
+
+    }
 
     // DEBUG
     /*
@@ -1129,7 +1158,7 @@ double DModelBank::GetGoalHeuristic(int belief_state_id)
   }
   BeliefState_t s = BeliefStateIDToState(belief_state_id);
   int internal_state_id = s.internal_state_id;
-  const double kHeurMultiplier = 50.0; //10
+  const double kHeurMultiplier = 50.0; //50
   return kHeurMultiplier*GetInternalGoalHeuristic(internal_state_id);
 }
 
@@ -1400,3 +1429,32 @@ void DModelBank::ResetStateMap()
 {
   StateMap.clear();
 }
+
+
+bool DModelBank::IsValidPoses(int model_id, const geometry_msgs::PoseArray& poses)
+{
+  const int switch_idx_ = 0;
+  geometry_msgs::Pose p_switch = poses.poses[switch_idx_];
+  if (p_switch.position.z > points_.poses[switch_idx_].position.z)
+  {
+    return false;
+  }
+  /*
+  if (model_id == 0)
+  {
+    if (p_switch.position.x > 0.9)
+    {
+      return false;
+    }
+  }
+  else
+  {
+    if (p_switch.position.x < 0.7)
+    {
+      return false;
+    }
+  }
+  */
+  return true;
+}
+

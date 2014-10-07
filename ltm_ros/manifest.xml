@@ -20,6 +20,7 @@
   <depend package="roscpp"/>
   <depend package="rosbag"/>
   <depend package="sensor_msgs"/>
+  <depend package="handle_detector"/>
 
 </package>
 

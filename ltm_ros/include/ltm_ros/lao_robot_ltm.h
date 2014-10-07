@@ -24,6 +24,7 @@
 #include <sensor_msgs/PointCloud2.h>
 
 #include <ar_track_alvar_msgs/AlvarMarkers.h>
+#include <handle_detector/HandleListMsg.h>
 
 #include <pviz/pviz.h>
 #include <pr2_arm_utils/arm.h>
@@ -65,7 +66,10 @@ class LAORobotLTM
     std::vector<double> model_offsets_x_, model_offsets_y_, model_offsets_z_;
     bool enforce_spatial_association_;
 
+    bool simulation_;
+    bool default_full_trajectory_execution_;
     // State machine variables
+    bool received_handle_;
     bool full_trajectory_execution_;
     int num_partial_traj_waypoints_;
     bool replanning_;
@@ -104,12 +108,16 @@ class LAORobotLTM
     ros::Subscriber learning_mode_sub_;
     ros::Subscriber ar_marker_sub_;
     ros::Subscriber perception_sub_;
+    ros::Subscriber handle_sub_;
  
     // Publishers
     ros::Publisher plan_pub_;
 
     // Callbacks
+    // Set grasp point by fixturing
     void GraspCB(const geometry_msgs::PoseStampedConstPtr& grasp_pose);
+    // Set grasp point by 
+    void HandleCB(const handle_detector::HandleListMsgConstPtr& handle_list);
     /**@brief For now, the goal state is defined only by the final position
     * of the end effector
     */

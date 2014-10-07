@@ -314,6 +314,7 @@ class DModelBank : public AbstractModelBank
     void FPrimIDToFPrim(int fprim_id, int* grasp_idx, int* force_idx);
 
     /**@brief Return true if valid state**/
+    bool IsValidPoses(int model_id, const geometry_msgs::PoseArray& poses);
     bool IsValidState(const State_t& s);
 
     /**@brief Return successor states for individual model**/

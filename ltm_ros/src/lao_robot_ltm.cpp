@@ -56,11 +56,13 @@ LAORobotLTM::LAORobotLTM() : record_observations_(false),
   private_nh.param("bag_file", bag_file_, string("observations.bag"));
   private_nh.param("reference_frame", reference_frame_, string("/map"));
   private_nh.param("sim_time_step", sim_time_step_, 0.1);
-  private_nh.param("full_trajectory_execution", full_trajectory_execution_, true);
+  private_nh.param("simulation", simulation_, true);
+  private_nh.param("full_trajectory_execution", default_full_trajectory_execution_, true);
   private_nh.param("num_partial_traj_waypoints", num_partial_traj_waypoints_, 8);
 
   ResetStateMachine();
   grasp_idxs_.clear(); //grasp_idxs are not part of state machine--they are stored for good once received, unless deliberately cleared by the user
+  received_handle_ = false; // and so is the handle
 
   d_model_bank_ = new DModelBank(reference_frame_);
   planner_ = new LAOPlanner();
@@ -103,6 +105,7 @@ LAORobotLTM::LAORobotLTM() : record_observations_(false),
   learning_mode_sub_ = nh_.subscribe ("learning_mode", 1, &LAORobotLTM::LearnCB, this);
   ar_marker_sub_ = nh_.subscribe("ar_pose_marker", 1, &LAORobotLTM::ARMarkersCB, this);
   perception_sub_ = nh_.subscribe("rectangles", 1, &LAORobotLTM::PerceptionCB, this);
+  handle_sub_ = nh_.subscribe("localization/handle_list", 1, &LAORobotLTM::HandleCB, this);
 
   // Initialize IK clients
   query_client_ = nh_.serviceClient<kinematics_msgs::GetKinematicSolverInfo>("pr2_right_arm_kinematics/get_ik_solver_info");
@@ -124,7 +127,7 @@ void LAORobotLTM::ResetStateMachine()
   num_goals_received_ = 0;
   grasped_ = false;
   observations_.clear();
-  full_trajectory_execution_ = false; //TODO: set to actual param
+  full_trajectory_execution_ = default_full_trajectory_execution_; //TODO: set to actual param
   replanning_ = false;
   executed_fprims_.clear();
   current_belief_.clear();
@@ -210,7 +213,6 @@ void LAORobotLTM::LearnCB(const std_msgs::Int32ConstPtr& learning_mode)
     learner_->GenerateModelsMinCut(d_model_bank_->GetDModelPoints(), edges, kinematic_models, &edge_params);
     num_models_ = edge_params.size();
 
-
     current_belief_.clear();
     current_belief_.resize(num_models_, 1.0/static_cast<double>(num_models_));
 
@@ -226,8 +228,8 @@ void LAORobotLTM::GraspCB(const geometry_msgs::PoseStampedConstPtr& grasp_pose)
 
   // Transform goal pose to reference frame
   geometry_msgs::PoseStamped grasp_pose_ref_frame;
-  tf_listener_.waitForTransform(grasp_pose->header.frame_id, reference_frame_, ros::Time::now(), ros::Duration(3.0));
-  tf_listener_.transformPose(reference_frame_, *grasp_pose, grasp_pose_ref_frame);
+  //tf_listener_.waitForTransform(grasp_pose->header.frame_id, reference_frame_, ros::Time(0), ros::Duration(3.0));
+  tf_listener_.transformPose(reference_frame_, ros::Time(0), *grasp_pose, grasp_pose->header.frame_id, grasp_pose_ref_frame);
   // Set the grasp pose, to transform the end effector trajectory later
   grasp_pose_ = grasp_pose_ref_frame.pose;
   // Store the local grasp pose
@@ -240,6 +242,147 @@ void LAORobotLTM::GraspCB(const geometry_msgs::PoseStampedConstPtr& grasp_pose)
   // TODO: Make this general
   geometry_msgs::PoseArray points = d_model_bank_->GetDModelPoints();
   grasp_idxs_.push_back(points.poses.size() - 1);
+  return;
+}
+
+void LAORobotLTM::HandleCB(const handle_detector::HandleListMsgConstPtr& handle_list)
+{
+  if (received_handle_)
+  {
+    return;
+  }
+  // TODO: arbitrarily picking a grasp pose for now
+  const int handle_idx = 0;
+  const int cylinder_idx = 0;
+
+  if (handle_list->handles.size() == 0)
+  {
+    ROS_WARN("No handles in handle list");
+    return;
+  }
+  if (handle_list->handles[handle_idx].cylinders.size() == 0)
+  {
+    ROS_WARN("No cylinders in handle");
+    return;
+  }
+
+  ROS_INFO("Num handles:  %d", handle_list->handles.size());
+  ROS_INFO("Num cylinders: %d", handle_list->handles[handle_idx].cylinders.size());
+
+  handle_detector::CylinderArrayMsg handle = handle_list->handles[handle_idx];
+  handle_detector::CylinderMsg cylinder = handle.cylinders[cylinder_idx];
+  geometry_msgs::PoseStampedPtr handle_pose(new geometry_msgs::PoseStamped);
+  geometry_msgs::Pose axis_pose, door_mid_pose;
+
+  // Fill in handle pose
+  handle_pose->pose = cylinder.pose;
+
+
+  handle_pose->header = handle.header;
+  tf_listener_.waitForTransform(handle_pose->header.frame_id, reference_frame_, ros::Time::now(), ros::Duration(3.0));
+  tf_listener_.transformPose(reference_frame_, ros::Time(0), *handle_pose, handle_pose->header.frame_id, *handle_pose);
+
+
+  // Fill in axis pose
+  // Take the rectangle corner furthest away from handle along y
+  double max_y = 0;
+  int farthest_idx = -1;
+  if (rectangles_.polygons.size() == 0)
+  {
+    ROS_WARN("No rectangles have been received");
+    return;
+  }
+  geometry_msgs::Polygon rect = rectangles_.polygons[0];
+  for (int ii = 0; ii < rect.points.size(); ++ii)
+  {
+    double dist = fabs(rect.points[ii].y - handle_pose->pose.position.y);
+    if (dist > max_y)
+    {
+      max_y = dist;
+     farthest_idx = ii;
+    }
+  }
+  axis_pose.position.x = rect.points[farthest_idx].x;
+  axis_pose.position.y = rect.points[farthest_idx].y;
+  axis_pose.position.z = rect.points[farthest_idx].z;
+  axis_pose.orientation.x = 0.0;
+  axis_pose.orientation.y = 0.0;
+  axis_pose.orientation.z = 0.0;
+  axis_pose.orientation.w = 1.0;
+
+  door_mid_pose.position.x = (rect.points[0].x  + rect.points[2].x)/2.0;
+  door_mid_pose.position.y = (rect.points[0].y  + rect.points[2].y)/2.0;
+  door_mid_pose.position.z = (rect.points[0].z  + rect.points[2].z)/2.0;
+  door_mid_pose.orientation.x = 0.0;
+  door_mid_pose.orientation.y = 0.0;
+  door_mid_pose.orientation.z = 0.0;
+  door_mid_pose.orientation.w = 1.0;
+
+  // Learn CB
+  /*
+  if (observations_.size() == 0)
+  {
+    ROS_WARN("No AR markers have been seen yet");
+    return;
+  }
+  */
+
+  ROS_INFO("Computing D-model edges");
+
+  geometry_msgs::PoseArray door_poses;
+  door_poses.poses.push_back(handle_pose->pose);
+  door_poses.poses.push_back(door_mid_pose);
+  door_poses.poses.push_back(axis_pose);
+
+  vector<Edge> edges;
+  d_model_bank_->SetPoints(door_poses);
+  learner_->SetModelBank(d_model_bank_);
+  geometry_msgs::Point handle_point = handle_pose->pose.position;
+  geometry_msgs::Point axis_point = axis_pose.position;
+  const double handle_axis_offset = -0.5;
+
+
+  edges.push_back(make_pair(0,1)); //handle-door mid
+  edges.push_back(make_pair(1,2));//door mid-wall
+  ROS_INFO("LTM Node: Number of edges in model: %d", int(edges.size()));
+  vector<vector<EdgeParams>> edge_params;
+  edge_params.resize(2); // 2 models--push and pull
+  for (int jj = 0; jj < edge_params.size(); ++jj)
+  {
+    EdgeParams e_params;
+    e_params.joint = REVOLUTE;
+    e_params.normal = tf::Vector3(1.0, 0.0, 0.0); //handle axis
+    e_params.center = tf::Vector3(handle_point.x, handle_point.y - handle_axis_offset, handle_point.z);
+    e_params.rad = 1.0;
+    edge_params[jj].push_back(e_params);
+    e_params.joint = REVOLUTE;
+    e_params.normal = tf::Vector3(0.0, 0.0, 1.0);//door axis
+    e_params.center = tf::Vector3(axis_point.x, axis_point.y, axis_point.z);
+    e_params.rad = 1.0;
+    edge_params[jj].push_back(e_params);
+  }
+  num_models_ = edge_params.size();
+
+  current_belief_.clear();
+  current_belief_.resize(num_models_, 1.0/static_cast<double>(num_models_));
+
+  d_model_bank_->InitFromObs(edges, edge_params); 
+  ROS_INFO("LTM Node: Initialized model from live observation\n");
+
+  // Set the grasp location to be same as handle pose
+  // Hack to align gripper -- roll=pi/2,pitch=0,yaw=0
+  tf::Quaternion quat(0.0, M_PI/2, 0.0);
+  handle_pose->pose.orientation.x = quat.x();
+  handle_pose->pose.orientation.y = quat.y();
+  handle_pose->pose.orientation.z = quat.z();
+  handle_pose->pose.orientation.w = quat.w();
+  handle_pose->header.frame_id = reference_frame_;
+
+
+  // Gripper offset
+  handle_pose->pose.position.x = handle_pose->pose.position.x - 0.15;
+  GraspCB(handle_pose);
+  received_handle_ = true;
   return;
 }
 
@@ -261,7 +404,7 @@ void LAORobotLTM::GoalCB(const geometry_msgs::PoseStampedConstPtr& goal_pose)
   // Transform goal pose to reference frame
   geometry_msgs::PoseStamped goal_pose_ref_frame;
   tf_listener_.waitForTransform(goal_pose->header.frame_id, reference_frame_, ros::Time::now(), ros::Duration(3.0));
-  tf_listener_.transformPose(reference_frame_, *goal_pose, goal_pose_ref_frame);
+  tf_listener_.transformPose(reference_frame_, ros::Time(0), *goal_pose, goal_pose->header.frame_id, goal_pose_ref_frame);
 
   // Set goal
   if (grasp_idxs_.size() == 0 || num_goals_received_ >= grasp_idxs_.size())
@@ -498,6 +641,9 @@ void LAORobotLTM::GetExecutionTraj(const vector<int>& all_state_ids, const vecto
         (*traj).poses[ii].orientation.x, (*traj).poses[ii].orientation.y, (*traj).poses[ii].orientation.z, (*traj).poses[ii].orientation.w);
   }
 
+
+  if (!simulation_)
+  {
   if ((*traj).poses.size() == 0)
   {
     ROS_WARN("Execution trajectory has no waypoints");
@@ -551,6 +697,12 @@ void LAORobotLTM::GetExecutionTraj(const vector<int>& all_state_ids, const vecto
   // Store the fprims, so that we can compute observation probabilities later
   executed_fprims_ = fprim_ids;
   TrajExecCB(exec_mode_ptr);
+  }
+  else
+  {
+    ResetStateMachine();
+    ROS_INFO("[LTM Node]: Simulation complete");
+  }
   return;
 }
 
