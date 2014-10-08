@@ -22,11 +22,16 @@ using namespace std;
 // Max joint velocity for PR2 arm
 const double kMaxJointVel = 0.5;
 // Home position for the right arm
-const vector<float> kRightArmHomeConfig = {0.564, 1.296, -0.042, -1.521, -3.273, -1.644, -40.441};
+//const vector<float> kRightArmHomeConfig = {0.564, 1.296, -0.042, -1.521, -3.273, -1.644, -40.441};
 const bool run_experiments_ = false;
 //const vector<float> kRightArmHomeConfig = {0.564, 1.296, -0.042, -1.521, -3.273, -1.644, -40.441};
 //const vector<float> kRightArmHomeConfig = {0.260, -0.339, 0.301, -1.141, 2.966, -1.559, -9.704};//kitchen-top cabinet
+const vector<float> kRightArmHomeConfig = {0.564, 0.441, -0.106, -2.117, -22.554, -1.823, -1.682}; //lab-door
 
+
+double kGripperOffsetX = 0.15;
+double kGripperOffsetY = -0.015; //-0.02
+double kGripperOffsetZ = 0.1;
 
 
 /*
@@ -329,17 +334,12 @@ void LAORobotLTM::HandleCB(const handle_detector::HandleListMsgConstPtr& handle_
 
   ROS_INFO("Computing D-model edges");
 
-  geometry_msgs::PoseArray door_poses;
-  door_poses.poses.push_back(handle_pose->pose);
-  door_poses.poses.push_back(door_mid_pose);
-  door_poses.poses.push_back(axis_pose);
 
   vector<Edge> edges;
-  d_model_bank_->SetPoints(door_poses);
-  learner_->SetModelBank(d_model_bank_);
+  //learner_->SetModelBank(d_model_bank_);
   geometry_msgs::Point handle_point = handle_pose->pose.position;
   geometry_msgs::Point axis_point = axis_pose.position;
-  const double handle_axis_offset = -0.5;
+  const double handle_axis_offset = 0.5; //-0.5 for counterclockwise door
 
 
   edges.push_back(make_pair(0,1)); //handle-door mid
@@ -365,9 +365,9 @@ void LAORobotLTM::HandleCB(const handle_detector::HandleListMsgConstPtr& handle_
 
   current_belief_.clear();
   current_belief_.resize(num_models_, 1.0/static_cast<double>(num_models_));
+  current_belief_[0] = 0.99;
+  current_belief_[1] = 0.01;
 
-  d_model_bank_->InitFromObs(edges, edge_params); 
-  ROS_INFO("LTM Node: Initialized model from live observation\n");
 
   // Set the grasp location to be same as handle pose
   // Hack to align gripper -- roll=pi/2,pitch=0,yaw=0
@@ -380,7 +380,19 @@ void LAORobotLTM::HandleCB(const handle_detector::HandleListMsgConstPtr& handle_
 
 
   // Gripper offset
-  handle_pose->pose.position.x = handle_pose->pose.position.x - 0.15;
+  handle_pose->pose.position.x = handle_pose->pose.position.x - kGripperOffsetX;
+  handle_pose->pose.position.y = handle_pose->pose.position.y - kGripperOffsetY;
+  handle_pose->pose.position.z = handle_pose->pose.position.z - kGripperOffsetZ;
+
+  geometry_msgs::PoseArray door_poses;
+  door_poses.poses.push_back(handle_pose->pose);
+  door_poses.poses.push_back(door_mid_pose);
+  door_poses.poses.push_back(axis_pose);
+  d_model_bank_->SetPoints(door_poses);
+  d_model_bank_->InitFromObs(edges, edge_params); 
+
+  ROS_INFO("LTM Node: Initialized model from live observation\n");
+
   GraspCB(handle_pose);
   received_handle_ = true;
   return;
@@ -478,13 +490,71 @@ void LAORobotLTM::UpdateStartState()
   if (replanning_)
   {
     geometry_msgs::PoseArray appended_poses;
-    ObservationsToModelPoses(last_observed_pose_, &appended_poses);
-    d_model_bank_->GetChangedStateFromWorldPoses(appended_poses, &start_state_.changed_inds, &start_state_.changed_points);
-    //ROS_INFO("[LAO Robot LTM]: %d points have changed in the start state", start_state_.changed_inds.size());
-    geometry_msgs::Pose p = appended_poses.poses[grasp_idxs_[0]];
-    ROS_WARN("[LAO Robot LTM]: New start pose: %f %f %f", p.position.x, p.position.y, p.position.z);
     geometry_msgs::PoseStamped end_eff_pose;
     r_arm_->getCurrentEndEffectorPose(end_eff_pose, reference_frame_);
+
+    //Door-specific hack
+    geometry_msgs::PoseArray poses;
+    geometry_msgs::Pose axis_pose, door_mid_pose;
+    //end_eff_pose.pose.position.x = end_eff_pose.pose.position.x + kGripperOffsetX;
+    //end_eff_pose.pose.position.y = end_eff_pose.pose.position.y + kGripperOffsetY;
+    //end_eff_pose.pose.position.z = end_eff_pose.pose.position.z + kGripperOffsetZ;
+
+    // Fill in axis pose
+    // Take the rectangle corner furthest away from handle along y
+    double max_y = 0;
+    int farthest_idx = -1;
+    if (rectangles_.polygons.size() == 0)
+    {
+      ROS_WARN("No rectangles have been received");
+      return;
+    }
+    geometry_msgs::Polygon rect = rectangles_.polygons[0];
+    for (int ii = 0; ii < rect.points.size(); ++ii)
+    {
+      double dist = fabs(rect.points[ii].y - end_eff_pose.pose.position.y);
+      if (dist > max_y)
+      {
+        max_y = dist;
+        farthest_idx = ii;
+      }
+    }
+    axis_pose.position.x = rect.points[farthest_idx].x;
+    axis_pose.position.y = rect.points[farthest_idx].y;
+    axis_pose.position.z = rect.points[farthest_idx].z;
+    axis_pose.orientation.x = 0.0;
+    axis_pose.orientation.y = 0.0;
+    axis_pose.orientation.z = 0.0;
+    axis_pose.orientation.w = 1.0;
+
+    door_mid_pose.position.x = (rect.points[0].x  + rect.points[2].x)/2.0;
+    door_mid_pose.position.y = (rect.points[0].y  + rect.points[2].y)/2.0;
+    door_mid_pose.position.z = (rect.points[0].z  + rect.points[2].z)/2.0;
+    door_mid_pose.orientation.x = 0.0;
+    door_mid_pose.orientation.y = 0.0;
+    door_mid_pose.orientation.z = 0.0;
+    door_mid_pose.orientation.w = 1.0;
+
+    poses.poses.push_back(end_eff_pose.pose);
+    poses.poses.push_back(door_mid_pose);
+    poses.poses.push_back(axis_pose);
+    ObservationsToModelPoses(poses, &appended_poses);
+    //ObservationsToModelPoses(last_observed_pose_, &appended_poses);
+
+    d_model_bank_->GetChangedStateFromWorldPoses(appended_poses, &start_state_.changed_inds, &start_state_.changed_points);
+
+
+    //Hack
+    start_state_.changed_points.poses.clear();
+    start_state_.changed_inds.clear();
+    start_state_.changed_inds.push_back(0);
+    start_state_.changed_inds.push_back(grasp_idxs_[0]);
+    start_state_.changed_points.poses.push_back(end_eff_pose.pose);
+    start_state_.changed_points.poses.push_back(end_eff_pose.pose);
+
+    ROS_INFO("[LAO Robot LTM]: %d points have changed in the start state", start_state_.changed_inds.size());
+    geometry_msgs::Pose p = appended_poses.poses[grasp_idxs_[0]];
+    ROS_WARN("[LAO Robot LTM]: New start pose: %f %f %f", p.position.x, p.position.y, p.position.z);
     ROS_WARN("[LAO Robot LTM]: End-eff pose: %f %f %f", end_eff_pose.pose.position.x, end_eff_pose.pose.position.y, end_eff_pose.pose.position.z);
   }
   else
@@ -534,7 +604,9 @@ void LAORobotLTM::GetStartBelief(vector<double>* belief)
 
   // Execute open-loop plan with current belief if we haven't seen the markers recently
   ros::Duration duration = ros::Time::now() - last_observed_pose_.header.stamp;
-  const bool marker_recently_observed = (duration < ros::Duration(2.0));
+  //doorhack
+  //const bool marker_recently_observed = (duration < ros::Duration(2.0));
+  bool marker_recently_observed = true;
   if (executed_fprims_.size() == 0 || !marker_recently_observed)
   {
     *belief = current_belief_;
@@ -554,11 +626,13 @@ void LAORobotLTM::GetStartBelief(vector<double>* belief)
     for (int ii = 0; ii < num_models_; ++ii)
     {
       (*belief)[ii] *= obs_probs[ii];
+      ROS_INFO("Prob for %d: %f", ii, obs_probs[ii]);
       total_weight += (*belief)[ii];
     }
     if (total_weight < kFPTolerance)
     {
       ROS_ERROR("[LAO Robot LTM]: Total weight is 0, returning uniform belief");
+      belief->clear();
       belief->resize(num_models_, 1.0/static_cast<double>(num_models_));
       return;
     }
@@ -585,6 +659,7 @@ void LAORobotLTM::GetExecutionTraj(const vector<int>& all_state_ids, const vecto
   int num_points;
   if (full_trajectory_execution_)
   {
+    ROS_INFO("[LAO Robot LTM]: Full trajectory execution");
     num_points = all_state_ids.size();
   }
   else 
@@ -609,7 +684,6 @@ void LAORobotLTM::GetExecutionTraj(const vector<int>& all_state_ids, const vecto
   {
     approach = true;
   }
-
 
   // Get forces from fprim_ids
   vector<tf::Vector3> forces;
@@ -713,7 +787,62 @@ void LAORobotLTM::TrajExecCB(const std_msgs::Int32ConstPtr& exec_mode_ptr)
   State_t temp_goal_state;
   temp_goal_state.grasp_idx = grasp_idxs_[0]; //TODO: this will fail for multi-grasp points
   geometry_msgs::PoseArray appended_poses;
-  ObservationsToModelPoses(last_observed_pose_, &appended_poses);
+
+
+  //Door-specific hack
+  geometry_msgs::PoseArray poses;
+  geometry_msgs::Pose axis_pose, door_mid_pose;
+
+  // Fill in axis pose
+  // Take the rectangle corner furthest away from handle along y
+  geometry_msgs::PoseStamped end_eff_pose;
+  r_arm_->getCurrentEndEffectorPose(end_eff_pose, reference_frame_);
+  //end_eff_pose.pose.position.x = end_eff_pose.pose.position.x + kGripperOffsetX;
+  //end_eff_pose.pose.position.y = end_eff_pose.pose.position.y + kGripperOffsetY;
+  //end_eff_pose.pose.position.z = end_eff_pose.pose.position.z + kGripperOffsetZ;
+  double max_y = 0;
+  int farthest_idx = -1;
+  if (rectangles_.polygons.size() == 0)
+  {
+    ROS_WARN("No rectangles have been received");
+    return;
+  }
+  geometry_msgs::Polygon rect = rectangles_.polygons[0];
+  for (int ii = 0; ii < rect.points.size(); ++ii)
+  {
+    double dist = fabs(rect.points[ii].y - end_eff_pose.pose.position.y);
+    if (dist > max_y)
+    {
+      max_y = dist;
+      farthest_idx = ii;
+    }
+  }
+  axis_pose.position.x = rect.points[farthest_idx].x;
+  axis_pose.position.y = rect.points[farthest_idx].y;
+  axis_pose.position.z = rect.points[farthest_idx].z;
+  axis_pose.orientation.x = 0.0;
+  axis_pose.orientation.y = 0.0;
+  axis_pose.orientation.z = 0.0;
+  axis_pose.orientation.w = 1.0;
+
+  door_mid_pose.position.x = (rect.points[0].x  + rect.points[2].x)/2.0;
+  door_mid_pose.position.y = (rect.points[0].y  + rect.points[2].y)/2.0;
+  door_mid_pose.position.z = (rect.points[0].z  + rect.points[2].z)/2.0;
+  door_mid_pose.orientation.x = 0.0;
+  door_mid_pose.orientation.y = 0.0;
+  door_mid_pose.orientation.z = 0.0;
+  door_mid_pose.orientation.w = 1.0;
+
+  poses.poses.push_back(end_eff_pose.pose);
+  poses.poses.push_back(door_mid_pose);
+  poses.poses.push_back(axis_pose);
+  ObservationsToModelPoses(poses, &appended_poses);
+  //ObservationsToModelPoses(last_observed_pose_, &appended_poses);
+
+
+
+
+
   d_model_bank_->GetChangedStateFromWorldPoses(appended_poses, &temp_goal_state.changed_inds, &temp_goal_state.changed_points);
   if (full_trajectory_execution_ || d_model_bank_->IsInternalGoalState(temp_goal_state)) 
   {

@@ -200,12 +200,12 @@ bool LAOPlanner::Plan(vector<int>* state_ids, vector<int>* fprim_ids)
       // TODO: Update this. Search ends if state being expanded is a goal state 
       if (model_bank_->IsGoalState(s.state_id))
       {
+        continue;
         //ROS_INFO("[LAO Planner]: Goal state has been found\n");
         exists_non_terminal_states = false;
         goal_state_id_ = s.state_id;
         goal_state = s;
         break;
-        //continue;
       }
 
       // Expand the state if not already expanded

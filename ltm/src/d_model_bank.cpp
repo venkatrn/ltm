@@ -493,15 +493,20 @@ void DModelBank::GetNextState(int model_id, const geometry_msgs::PoseArray& in_p
   default_switch_pose_.position.z =  0.5;
 
   pair<int,int> switch_edge(0,1);
+  Edge rev_edge = make_pair(switch_edge.second, switch_edge.first);
   EdgeParams switch_new_e_params, switch_default_e_params, door_params;
   //door_params.joint = REVOLUTE;
   //door_params.normal = tf::Vector3(0,0,1);
   //door_params.center = tf::Vector3(1.0,0.5,1.0);
   //edge_maps_[model_id]->at(make_pair(0,1)) = door_params;
 
-  switch_default_e_params.joint = REVOLUTE;
-  switch_default_e_params.normal = tf::Vector3(1,0,0);
-  switch_default_e_params.center = tf::Vector3(0.8,-0.5,0.5); //y is -0.5
+  static bool first_time = true; //Terrible hack
+  if (first_time)
+  {
+    EdgeParams e_params = edge_maps_[model_id]->at(switch_edge);
+    switch_default_e_params = e_params;
+    first_time = false;
+  }
   switch_new_e_params.joint = RIGID;
   switch_new_e_params.normal = tf::Vector3(0,0,0);
   switch_new_e_params.center = tf::Vector3(0,0,0);
@@ -512,16 +517,15 @@ void DModelBank::GetNextState(int model_id, const geometry_msgs::PoseArray& in_p
   {
     EdgeMap* edge_map = edge_maps_[model_id];
     //if(PosesEqual(p_switch, default_switch_pose_))
-    if(p_switch.position.z < points_.poses[switch_idx_].position.z - 0.1)
+    if(p_switch.position.z < points_.poses[switch_idx_].position.z - 0.25) //0.25
     {
       ROS_INFO("Switching edge params");
       edge_map->at(switch_edge) = switch_new_e_params;
-      Edge rev_edge = make_pair(switch_edge.second, switch_edge.first);
       edge_map->at(rev_edge) = switch_new_e_params;
     }
     else
     {
-      //edge_map->at(switch_edge) = switch_default_e_params;
+      edge_map->at(switch_edge) = switch_default_e_params;
     }
   }
 
@@ -1000,7 +1004,7 @@ void DModelBank::GetSuccs(int model_id, int source_state_id, vector<int>* succs,
     GetNextState(model_id, in_points, source_state.grasp_idx, force, env_cfg_.sim_time_step, &out_points);
     if (!IsValidPoses(model_id, out_points))
     {
-      continue;
+      //continue;
       //TODO: This needs to be thought over. Should there be a valid successor that is the same as the input, or no successor at all?
       //out_points = in_points;
       succs->push_back(source_state_id);
@@ -1178,7 +1182,8 @@ double DModelBank::GetInternalGoalHeuristic(int internal_state_id)
   {
     geometry_msgs::PoseArray state_poses;
     GetWorldPosesFromState(s, &state_poses);
-    return kCostMultiplier*max(0.0, kGoalEndEffDisp - Dist(state_poses.poses[grasp_idxs_[0]].position, points_.poses[grasp_idxs_[0]].position))/env_cfg_.sim_time_step;
+    double z_cost = kCostMultiplier*max(0.0, state_poses.poses[grasp_idxs_[0]].position.z - points_.poses[grasp_idxs_[0]].position.z);
+    return z_cost + kCostMultiplier*max(0.0, kGoalEndEffDisp - Dist(state_poses.poses[grasp_idxs_[0]].position, points_.poses[grasp_idxs_[0]].position))/env_cfg_.sim_time_step;
   }
 
   for (size_t ii = 0; ii < grasp_idxs_.size(); ++ii)
@@ -1435,26 +1440,24 @@ bool DModelBank::IsValidPoses(int model_id, const geometry_msgs::PoseArray& pose
 {
   const int switch_idx_ = 0;
   geometry_msgs::Pose p_switch = poses.poses[switch_idx_];
-  if (p_switch.position.z > points_.poses[switch_idx_].position.z)
+  if (p_switch.position.z > points_.poses[switch_idx_].position.z + 0.2)
   {
     return false;
   }
-  /*
-  if (model_id == 0)
+  if (model_id == 0) // PULL
   {
-    if (p_switch.position.x > 0.9)
+    if (p_switch.position.x > points_.poses[switch_idx_].position.x + 0.2)
     {
       return false;
     }
   }
-  else
+  else //PUSH
   {
-    if (p_switch.position.x < 0.7)
+    if (p_switch.position.x < points_.poses[switch_idx_].position.x - 0.2)
     {
       return false;
     }
   }
-  */
   return true;
 }
 

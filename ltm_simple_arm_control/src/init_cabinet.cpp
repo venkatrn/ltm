@@ -82,6 +82,7 @@ int main(int argc, char** argv){
     r_init[6] = -40.441;
     */
     
+    /*
     r_init[0] = 0.564;
     r_init[1] = 0.860;
     r_init[2] = 0.210;
@@ -89,7 +90,16 @@ int main(int argc, char** argv){
     r_init[4] = -123.065;
     r_init[5] = -1.624;
     r_init[6] = -372.285;
+    */
 
+    // Lab-door
+    r_init[0] = 0.564;
+    r_init[1] = 0.441;
+    r_init[2] = -0.106;
+    r_init[3] = -2.117;
+    r_init[4] = -22.554;
+    r_init[5] = -1.823;
+    r_init[6] = -1.682;
 
     r_arm.sendArmToConfiguration(&r_init[0],3);
     l_arm.sendArmToConfiguration(&l_init[0],3);
